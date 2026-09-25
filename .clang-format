@@ -1,16 +1,13 @@
-# my favorite clang-format
-BasedOnStyle: Google
-IndentWidth: 4
-ColumnLimit: 100
-UseTab: Never
-AllowShortIfStatementsOnASingleLine: Never
-AllowShortBlocksOnASingleLine: Never
-AllowShortCaseLabelsOnASingleLine: false
-AllowShortEnumsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Empty
-AllowShortLambdasOnASingleLine: None
-AllowShortLoopsOnASingleLine: false
-BreakBeforeBraces: Attach
+Language: Cpp
+BasedOnStyle: WebKit
+
+AlignConsecutiveMacros: true
+AlignConsecutiveAssignments: true
+InsertNewlineAtEOF: true
+
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: Never
 Cpp11BracedListStyle: false
+
 # cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 # ln -sF build/compile_commands.json .
