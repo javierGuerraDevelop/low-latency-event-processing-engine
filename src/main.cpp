@@ -10,7 +10,8 @@
 #include "line_writer.h"
 #include "socket_sender.h"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <logs_directory>" << std::endl;
         return 1;
@@ -25,10 +26,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Writing shotcalls to: " << output_path << std::endl;
 
     // Wire engine callback to write shotcalls to file and send over socket
-    auto file_writer = make_shotcall_writer(output_file);
+    auto file_writer   = make_shotcall_writer(output_file);
     auto socket_sender = make_socket_sender();
 
-    ShotCallEngine engine{};
+    ShotCallEngine engine { };
     engine.set_shotcall_callback(
         [file_writer, socket_sender](const std::string& enemy_id, const std::string& callout) {
             file_writer(enemy_id, callout);

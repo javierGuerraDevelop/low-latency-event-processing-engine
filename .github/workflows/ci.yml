@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -S . -DSHOTCALLER_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -B build-san -S . -DSHOTCALLER_ENABLE_SANITIZERS=ON
+          -DSHOTCALLER_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build-san -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build-san --output-on-failure
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install clang-format
+        run: pip install clang-format==23.1.1
+      - name: Check formatting
+        run: clang-format --dry-run --Werror src/*.cpp include/*.h tests/*.cpp

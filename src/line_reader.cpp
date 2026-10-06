@@ -2,7 +2,8 @@
 
 namespace ch = std::chrono;
 
-std::string get_latest_combat_log(const std::string& logs_directory) {
+std::string get_latest_combat_log(const std::string& logs_directory)
+{
     namespace fs = std::filesystem;
 
     std::string latest_file;
@@ -28,7 +29,7 @@ std::string get_latest_combat_log(const std::string& logs_directory) {
         if (!found || file_time > latest_time) {
             latest_time = file_time;
             latest_file = entry.path().string();
-            found = true;
+            found       = true;
         }
     }
 
@@ -41,8 +42,9 @@ std::string get_latest_combat_log(const std::string& logs_directory) {
     return latest_file;
 }
 
-void monitor_file(const std::string& filename, ShotCallEngine& engine) {
-    std::ifstream log_file{filename};
+void monitor_file(const std::string& filename, ShotCallEngine& engine)
+{
+    std::ifstream log_file { filename };
     if (!log_file.is_open()) {
         std::cerr << "Failed to open combat log: " << filename << std::endl;
         return;
@@ -59,7 +61,7 @@ void monitor_file(const std::string& filename, ShotCallEngine& engine) {
             if (line.empty()) {
                 continue;
             }
-            CombatEvent event{parse_line(line)};
+            CombatEvent event { parse_line(line) };
             if (!event.event_type.empty()) {
                 engine.handle_event(event);
             }

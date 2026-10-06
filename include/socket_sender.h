@@ -12,4 +12,4 @@
 std::function<void(const std::string&, const std::string&)> make_socket_sender(
     const std::string& host = "127.0.0.1", int port = 9999);
 
-#endif  // SHOTCALLERCPP_SOCKET_SENDER_H
+#endif // SHOTCALLERCPP_SOCKET_SENDER_H

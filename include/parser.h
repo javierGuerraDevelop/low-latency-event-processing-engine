@@ -27,4 +27,4 @@ struct CombatEvent {
 
 CombatEvent parse_line(const std::string& string);
 
-#endif  // SHOTCALLERCPP_PARSER_H
+#endif // SHOTCALLERCPP_PARSER_H

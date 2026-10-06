@@ -18,4 +18,4 @@ void monitor_file(const std::string& filename, ShotCallEngine& engine);
 // Returns the path to the most recently modified WoWCombatLog file in the directory.
 std::string get_latest_combat_log(const std::string& logs_directory);
 
-#endif  // SHOTCALLERCPP_LINE_READER_H
+#endif // SHOTCALLERCPP_LINE_READER_H
