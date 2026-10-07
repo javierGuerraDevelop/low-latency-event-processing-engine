@@ -14,6 +14,7 @@ struct CombatEvent {
     std::chrono::system_clock::time_point time_stamp { };
     std::string event_type;
     std::string name;
+    std::string target_name;
     std::string source_id;
     std::string target_id;
     std::string source_flags;

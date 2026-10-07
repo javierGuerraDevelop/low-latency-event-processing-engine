@@ -6,14 +6,13 @@
 #ifndef SHOTCALLERCPP_ENGINE_H
 #define SHOTCALLERCPP_ENGINE_H
 
-#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <list>
 #include <map>
 #include <mutex>
 #include <string>
-#include <thread>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -59,19 +58,23 @@ struct EnemyAbility {
     }
 };
 
+// A party member known by GUID. The name may stay empty until an event
+// carrying it is seen; the class comes from an action or COMBATANT_INFO.
 struct Player {
-    std::string id;
+    std::string guid;
     std::string name;
-    std::string p_class;
+    std::string class_name;
+    int spec_id { 0 };
+    std::string spec_name;
     AbilityState interrupt;
     std::map<int, AbilityState> crowd_control;
-    bool is_alive = true;
+    bool is_alive { true };
 
-    Player(std::string guid, std::string player_name, std::string player_class,
+    Player(std::string player_guid, std::string player_name, std::string player_class,
         AbilityState interrupt_ability, std::map<int, AbilityState> crowd_control_abilities)
-        : id { std::move(guid) }
+        : guid { std::move(player_guid) }
         , name { std::move(player_name) }
-        , p_class { std::move(player_class) }
+        , class_name { std::move(player_class) }
         , interrupt { interrupt_ability }
         , crowd_control { std::move(crowd_control_abilities) }
     {
@@ -80,17 +83,18 @@ struct Player {
     Player() = default;
 };
 
+// A tracked enemy and the abilities generated from its static profile.
 struct Enemy {
-    std::string id;
+    std::string guid;
     std::vector<EnemyAbility> spells;
-    ch::time_point<ch::system_clock> combat_start_time;
-    bool is_ccable;
+    ch::time_point<ch::system_clock> first_seen_time;
+    bool is_ccable { false };
 
-    Enemy(std::string guid, std::vector<EnemyAbility> abilities,
+    Enemy(std::string enemy_guid, std::vector<EnemyAbility> abilities,
         ch::time_point<ch::system_clock> first_seen, bool ccable)
-        : id { std::move(guid) }
+        : guid { std::move(enemy_guid) }
         , spells { std::move(abilities) }
-        , combat_start_time { first_seen }
+        , first_seen_time { first_seen }
         , is_ccable { ccable }
     {
     }
@@ -100,35 +104,37 @@ class ShotCallEngine {
 public:
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
+    void set_shotcall_callback(
+        std::function<void(const std::string&, const std::string&)> callback);
+    // Runs on a background thread; dispatches queued shotcalls at their scheduled time.
+    void process_shotcalls();
+    // Acquires mtx_ itself. Dispatches the next shotcall if one is due and
+    // returns true when a callback was invoked.
+    bool dispatch_next_shotcall(ch::time_point<ch::system_clock> now);
+
+private:
+    // Handlers and helpers below assume mtx_ is already held.
     void handle_player_event(const CombatEvent& event);
     void handle_enemy_event(const CombatEvent& event);
     void handle_death(const CombatEvent& event);
-    // Auto-detect player class or enemy type from combat event spells.
+    void handle_combatant_info(const CombatEvent& event);
+    // Auto-detects player class or enemy type from combat event spells.
     void identify_player(const CombatEvent& event);
     void identify_enemy(const CombatEvent& event);
+    // Fills a roster player's name if it is still empty.
+    void learn_player_name(const std::string& guid, std::string_view name);
     // Pre-computes all shotcalls for an enemy over a 5-minute window.
     void generate_shotcalls(Enemy& enemy);
-    // Runs on a background thread; dispatches queued shotcalls at their scheduled time.
-    void process_shotcalls();
-    // Dispatches the next shotcall if one is due. Returns true if a shotcall was dispatched.
-    bool dispatch_next_shotcall(ch::time_point<ch::system_clock> now);
-
-    void set_shotcall_callback(
-        std::function<void(const std::string&, const std::string&)> callback);
-
-private:
     // Returns the name of a living player whose interrupt/CC is off cooldown
     // at call_time, or a fallback message if none available.
     std::string find_available_interrupter(const ch::time_point<ch::system_clock>& call_time);
     std::string find_available_ccer(const ch::time_point<ch::system_clock>& call_time);
-    std::function<void(const std::string&, const std::string&)> shotcall_callback_;
 
+    std::function<void(const std::string&, const std::string&)> shotcall_callback_;
     std::mutex mtx_; // Guards all mutable state below
     std::map<std::string, Player> roster_;
-    std::map<std::string, AbilityState> roster_interrupts_;
-    std::map<std::string, std::map<int, AbilityState>> roster_crowd_control_;
     std::map<std::string, Enemy> enemy_roster_;
-    // Queue entries: (is_interruptable, enemy_id, callout_text, scheduled_time)
+    // Queue entries: (is_interruptable, enemy_guid, callout_text, scheduled_time)
     std::list<std::tuple<bool, std::string, std::string, ch::time_point<ch::system_clock>>>
         shot_call_queue_;
 };

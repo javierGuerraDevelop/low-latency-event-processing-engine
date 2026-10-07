@@ -65,6 +65,119 @@ TEST(Engine, IdentifyPlayer_MultipleDifferentClasses)
     // All three identified without error
 }
 
+TEST(Engine, FirstEventInterrupt_IdentifiesWarriorAndAppliesCooldown)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    // Pummel (6552) arrives before any class-identifying spell.
+    auto pummel = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6552, "", now);
+    engine.handle_event(pummel);
+
+    // A later identifying spell must not duplicate or reset the roster entry.
+    auto shout = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now + ch::seconds { 1 });
+    engine.handle_event(shout);
+
+    auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now);
+    engine.handle_event(enemy);
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    // Pummel is on cooldown until now+15s, so the 4s call has no interrupter.
+    engine.dispatch_next_shotcall(now + ch::seconds { 4 });
+    EXPECT_NE(callout.find("this one is going off"), std::string::npos);
+
+    // The entry was not reset: after the cooldown the Warrior is assigned.
+    engine.dispatch_next_shotcall(now + ch::milliseconds { 4000 + 16900 });
+    EXPECT_NE(callout.find("Tank"), std::string::npos);
+}
+
+TEST(Engine, FirstEventCrowdControl_IdentifiesWarrior)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    // Shockwave (46968) is only known through the crowd-control table.
+    auto shockwave = make_event("SPELL_CAST_SUCCESS", "Player-1-CCC", "Tank", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 46968, "", now);
+    engine.handle_event(shockwave);
+
+    // NPC 164557 casts a non-interruptable ability that requires a CCer.
+    auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-164557-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-CCC", 326409, "164557", now);
+    engine.handle_event(enemy);
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    engine.dispatch_next_shotcall(now + ch::milliseconds { 8900 });
+    EXPECT_NE(callout.find("Tank"), std::string::npos);
+}
+
+TEST(Engine, UnknownFirstSpell_IgnoredUntilIdentified)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    // The first event carries no class information: ignored without crashing.
+    auto unknown = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Nobody", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 999999, "", now);
+    engine.handle_event(unknown);
+
+    // A later identifying spell creates the entry.
+    auto shout = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Nobody", PLAYER_FLAG,
+        "Player-1-AAA", 6673, "", now + ch::seconds { 1 });
+    engine.handle_event(shout);
+
+    auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now + ch::seconds { 1 });
+    engine.handle_event(enemy);
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    engine.dispatch_next_shotcall(now + ch::seconds { 1 } + ch::seconds { 4 });
+    EXPECT_NE(callout.find("Nobody"), std::string::npos);
+}
+
+TEST(Engine, UnknownSpecCombatantInfo_DoesNotBlockIdentification)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    // An unknown spec must not create a player entry that would block the
+    // normal action-based identification path.
+    auto info    = make_event("COMBATANT_INFO", "Player-1-ZZZ", "", "0", "", 0, "", now);
+    info.spec_id = 999999;
+    engine.handle_event(info);
+
+    auto shout = make_event("SPELL_CAST_SUCCESS", "Player-1-ZZZ", "Tank", PLAYER_FLAG,
+        "Player-1-AAA", 6673, "", now + ch::seconds { 1 });
+    engine.handle_event(shout);
+
+    auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now + ch::seconds { 1 });
+    engine.handle_event(enemy);
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    engine.dispatch_next_shotcall(now + ch::seconds { 1 } + ch::seconds { 4 });
+    EXPECT_NE(callout.find("Tank"), std::string::npos);
+}
+
 // ==================== Cooldown Tracking ====================
 
 TEST(Engine, InterruptCast_PutsOnCooldown)

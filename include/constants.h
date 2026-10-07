@@ -65,6 +65,74 @@ constexpr std::string_view get_class_from_identifying_spells(int spell_id)
     return "";
 }
 
+// Current spec IDs mapped to class and to the combined "Spec Class" name.
+inline constexpr std::array<std::tuple<int, std::string_view, std::string_view>, 40> spec_data { {
+    { 250, "Death Knight", "Blood Death Knight" },
+    { 251, "Death Knight", "Frost Death Knight" },
+    { 252, "Death Knight", "Unholy Death Knight" },
+    { 577, "Demon Hunter", "Havoc Demon Hunter" },
+    { 581, "Demon Hunter", "Vengeance Demon Hunter" },
+    { 1480, "Demon Hunter", "Devourer Demon Hunter" },
+    { 102, "Druid", "Balance Druid" },
+    { 103, "Druid", "Feral Druid" },
+    { 104, "Druid", "Guardian Druid" },
+    { 105, "Druid", "Restoration Druid" },
+    { 1467, "Evoker", "Devastation Evoker" },
+    { 1468, "Evoker", "Preservation Evoker" },
+    { 1473, "Evoker", "Augmentation Evoker" },
+    { 253, "Hunter", "Beast Mastery Hunter" },
+    { 254, "Hunter", "Marksmanship Hunter" },
+    { 255, "Hunter", "Survival Hunter" },
+    { 62, "Mage", "Arcane Mage" },
+    { 63, "Mage", "Fire Mage" },
+    { 64, "Mage", "Frost Mage" },
+    { 268, "Monk", "Brewmaster Monk" },
+    { 269, "Monk", "Windwalker Monk" },
+    { 270, "Monk", "Mistweaver Monk" },
+    { 65, "Paladin", "Holy Paladin" },
+    { 66, "Paladin", "Protection Paladin" },
+    { 70, "Paladin", "Retribution Paladin" },
+    { 256, "Priest", "Discipline Priest" },
+    { 257, "Priest", "Holy Priest" },
+    { 258, "Priest", "Shadow Priest" },
+    { 259, "Rogue", "Assassination Rogue" },
+    { 260, "Rogue", "Outlaw Rogue" },
+    { 261, "Rogue", "Subtlety Rogue" },
+    { 262, "Shaman", "Elemental Shaman" },
+    { 263, "Shaman", "Enhancement Shaman" },
+    { 264, "Shaman", "Restoration Shaman" },
+    { 265, "Warlock", "Affliction Warlock" },
+    { 266, "Warlock", "Demonology Warlock" },
+    { 267, "Warlock", "Destruction Warlock" },
+    { 71, "Warrior", "Arms Warrior" },
+    { 72, "Warrior", "Fury Warrior" },
+    { 73, "Warrior", "Protection Warrior" },
+} };
+
+// Returns the class for a spec ID, or an empty view for an unknown spec.
+constexpr std::string_view get_class_from_spec(int spec_id)
+{
+    for (const auto& [id, class_name, spec_name] : spec_data) {
+        if (id == spec_id) {
+            return class_name;
+        }
+    }
+
+    return "";
+}
+
+// Returns the combined "Spec Class" name, or an empty view for an unknown spec.
+constexpr std::string_view get_spec_name(int spec_id)
+{
+    for (const auto& [id, class_name, spec_name] : spec_data) {
+        if (id == spec_id) {
+            return spec_name;
+        }
+    }
+
+    return "";
+}
+
 inline constexpr std::array<std::string_view, 38> ignorable_events {
     "RANGE_DAMAGE",
     "RANGE_MISSED",
@@ -157,6 +225,18 @@ constexpr std::chrono::seconds get_interrupt_cd(std::string_view player_class)
     return { };
 }
 
+// Returns the class that owns an interrupt spell, or empty for an unknown id.
+constexpr std::string_view get_class_from_interrupt_spell(int spell_id)
+{
+    for (const auto& [class_name, interrupt_id, interrupt_cd] : interrupt_data) {
+        if (interrupt_id == spell_id) {
+            return class_name;
+        }
+    }
+
+    return "";
+}
+
 inline constexpr std::array<
     std::tuple<std::string_view, std::string_view, int, std::chrono::seconds>, 29>
     crowd_control_data {
@@ -190,6 +270,18 @@ inline constexpr std::array<
             { "Warrior", "Intimidating Shout", 5246, std::chrono::seconds { 90 } },
             { "Warrior", "Shockwave", 46968, std::chrono::seconds { 40 } } }
     };
+
+// Returns the class that owns a crowd-control spell, or empty for an unknown id.
+constexpr std::string_view get_class_from_cc_spell(int spell_id)
+{
+    for (const auto& [class_name, spell_name, cc_spell_id, cc_cooldown] : crowd_control_data) {
+        if (cc_spell_id == spell_id) {
+            return class_name;
+        }
+    }
+
+    return "";
+}
 
 inline constexpr std::array<int, 5> battle_rez_ids { 10609, 376999, 20707, 61999, 407133 };
 

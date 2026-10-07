@@ -208,3 +208,57 @@ TEST(Constants, CCIsNotInterrupt)
     EXPECT_TRUE(Constants::is_crowd_control(179057));
     EXPECT_FALSE(Constants::is_interrupt(179057));
 }
+
+// --- get_class_from_spec / get_spec_name ---
+
+TEST(Constants, SpecClass_FixturePlayers)
+{
+    EXPECT_EQ(Constants::get_class_from_spec(65), "Paladin");
+    EXPECT_EQ(Constants::get_class_from_spec(267), "Warlock");
+    EXPECT_EQ(Constants::get_class_from_spec(252), "Death Knight");
+    EXPECT_EQ(Constants::get_class_from_spec(262), "Shaman");
+    EXPECT_EQ(Constants::get_class_from_spec(73), "Warrior");
+}
+
+TEST(Constants, SpecName_FixturePlayers)
+{
+    EXPECT_EQ(Constants::get_spec_name(65), "Holy Paladin");
+    EXPECT_EQ(Constants::get_spec_name(267), "Destruction Warlock");
+    EXPECT_EQ(Constants::get_spec_name(252), "Unholy Death Knight");
+    EXPECT_EQ(Constants::get_spec_name(262), "Elemental Shaman");
+    EXPECT_EQ(Constants::get_spec_name(73), "Protection Warrior");
+}
+
+TEST(Constants, Spec_UnknownReturnsEmpty)
+{
+    EXPECT_EQ(Constants::get_class_from_spec(999999), "");
+    EXPECT_EQ(Constants::get_class_from_spec(0), "");
+    EXPECT_EQ(Constants::get_spec_name(999999), "");
+    EXPECT_EQ(Constants::get_spec_name(0), "");
+}
+
+// --- get_class_from_interrupt_spell / get_class_from_cc_spell ---
+
+TEST(Constants, ClassFromInterruptSpell_Known)
+{
+    EXPECT_EQ(Constants::get_class_from_interrupt_spell(6552), "Warrior");
+    EXPECT_EQ(Constants::get_class_from_interrupt_spell(57994), "Shaman");
+}
+
+TEST(Constants, ClassFromInterruptSpell_UnknownReturnsEmpty)
+{
+    EXPECT_EQ(Constants::get_class_from_interrupt_spell(999999), "");
+    EXPECT_EQ(Constants::get_class_from_interrupt_spell(0), "");
+}
+
+TEST(Constants, ClassFromCcSpell_Known)
+{
+    EXPECT_EQ(Constants::get_class_from_cc_spell(46968), "Warrior");
+    EXPECT_EQ(Constants::get_class_from_cc_spell(179057), "Demon Hunter");
+}
+
+TEST(Constants, ClassFromCcSpell_UnknownReturnsEmpty)
+{
+    EXPECT_EQ(Constants::get_class_from_cc_spell(999999), "");
+    EXPECT_EQ(Constants::get_class_from_cc_spell(0), "");
+}
