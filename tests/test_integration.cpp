@@ -70,7 +70,7 @@ TEST(Integration, EnemyCast_QueuesCall)
         callout = text;
     });
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
+    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
     EXPECT_FALSE(callout.empty());
 }
 
@@ -95,7 +95,7 @@ TEST(Integration, EnemyDeath_PurgesQueuedCalls)
         ++callbacks;
     });
 
-    EXPECT_FALSE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
+    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 0u);
     EXPECT_EQ(callbacks, 0);
 }
 
@@ -127,13 +127,13 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
         callout = text;
     });
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(first_cast->time_stamp + *first_cast_delay));
+    EXPECT_EQ(engine.dispatch_due(first_cast->time_stamp + *first_cast_delay), 1u);
     EXPECT_NE(callout.find("Lilrawb"), std::string::npos);
 
     engine.handle_event(*death);
     engine.handle_event(*second_cast);
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(second_cast->time_stamp + *first_cast_delay));
+    EXPECT_EQ(engine.dispatch_due(second_cast->time_stamp + *first_cast_delay), 1u);
     EXPECT_NE(callout.find("this one is going off"), std::string::npos);
 }
 
@@ -161,7 +161,7 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
         callout = text;
     });
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
+    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
     // The Paladin is a valid assignee, so the fallback phrase must not appear.
     // The name is still unknown at this point and must not be invented.
     EXPECT_EQ(callout.find("this one is going off"), std::string::npos);
@@ -194,7 +194,7 @@ TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
         callout = text;
     });
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(damage->time_stamp + *first_cast));
+    EXPECT_EQ(engine.dispatch_due(damage->time_stamp + *first_cast), 1u);
     EXPECT_NE(callout.find("Bigchalupa"), std::string::npos);
 }
 
@@ -232,5 +232,5 @@ TEST(Integration, ChallengeRosterSnapshotCompletes)
     EXPECT_EQ(status.identified, 5);
     EXPECT_EQ(status.expected, 5);
 
-    EXPECT_TRUE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
+    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
 }

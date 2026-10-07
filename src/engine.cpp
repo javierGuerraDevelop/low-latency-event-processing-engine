@@ -5,9 +5,8 @@
 #include <iostream>
 #include <map>
 #include <mutex>
-#include <set>
+#include <optional>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -58,6 +57,17 @@ bool is_hostile_action(std::string_view event_type)
     return false;
 }
 
+// Finds the scheduled ability matching a call; stale generations do not match.
+EnemyAbility* find_ability(Enemy& enemy, int spell_id, std::uint64_t generation)
+{
+    for (auto& ability : enemy.spells) {
+        if (ability.id == spell_id && ability.generation == generation) {
+            return &ability;
+        }
+    }
+    return nullptr;
+}
+
 // Builds the class's crowd-control abilities with zeroed cooldowns.
 std::map<int, AbilityState> build_crowd_control_map(const std::string& class_name)
 {
@@ -80,6 +90,12 @@ void initialize_player_abilities(Player& player, const std::string& class_name)
 
 } // namespace
 
+ShotCallEngine::ShotCallEngine(ch::milliseconds call_lead, ch::milliseconds late_grace)
+    : call_lead_ { call_lead }
+    , late_grace_ { late_grace }
+{
+}
+
 void ShotCallEngine::handle_event(const CombatEvent& event)
 {
     std::lock_guard<std::mutex> lock { mtx_ };
@@ -96,6 +112,7 @@ void ShotCallEngine::handle_event(const CombatEvent& event)
     }
 
     if (handle_boundary_event(event)) {
+        wake_scheduler_locked();
         return;
     }
 
@@ -228,11 +245,9 @@ void ShotCallEngine::handle_death(const CombatEvent& event)
     }
 
     if (auto it = enemy_roster_.find(event.target_id); it != enemy_roster_.end()) {
-        const std::string enemy_guid = it->second.guid;
-        shot_call_queue_.remove_if([&enemy_guid](const auto& shotcall) {
-            return std::get<1>(shotcall) == enemy_guid;
-        });
+        // Queued calls are discarded lazily when their turn comes up.
         enemy_roster_.erase(it);
+        wake_scheduler_locked();
     }
 }
 
@@ -322,34 +337,34 @@ void ShotCallEngine::learn_player_name(const std::string& guid, std::string_view
     }
 }
 
-void ShotCallEngine::generate_shotcalls(Enemy& enemy)
+void ShotCallEngine::enqueue_shotcall_locked(
+    const std::string& enemy_guid, const EnemyAbility& ability)
 {
-    for (size_t i = 0; i < enemy.spells.size(); ++i) {
-        long long cd_ms = enemy.spells.at(i).cooldown.count();
-        if (cd_ms <= 0) {
-            continue;
-        }
+    shot_call_queue_.emplace(ability.next_due,
+        ScheduledShotCall { enemy_guid, ability.id, ability.callout, ability.next_due,
+            ability.generation });
+    wake_scheduler_locked();
+}
 
-        long long five_minutes_ms = 300000;
-        auto iterations           = (five_minutes_ms / cd_ms) + 1;
-        for (long long j = 0; j < iterations; ++j) {
-            ch::milliseconds duration { };
-            if (j == 0) {
-                duration = enemy.spells.at(i).first_cast;
-            } else {
-                duration = enemy.spells.at(i).first_cast + ch::milliseconds { j * cd_ms };
-            }
+void ShotCallEngine::advance_recurrence(Enemy& enemy, EnemyAbility& ability)
+{
+    ability.next_due += ability.cooldown;
+    ++ability.generation;
+    enqueue_shotcall_locked(enemy.guid, ability);
+}
 
-            std::tuple<bool, std::string, std::string, ch::time_point<ch::system_clock>> shotcall {
-                std::make_tuple(enemy.spells.at(i).is_interruptable, enemy.guid,
-                    enemy.spells.at(i).callout, (enemy.first_seen_time + duration))
-            };
-            shot_call_queue_.push_back(shotcall);
-        }
+void ShotCallEngine::wake_scheduler_locked()
+{
+    ++queue_revision_;
+    wakeup_.notify_all();
+}
+
+std::optional<ch::time_point<ch::system_clock>> ShotCallEngine::next_actionable_time_locked() const
+{
+    if (!party_size_ok_ || shot_call_queue_.empty()) {
+        return std::nullopt;
     }
-    shot_call_queue_.sort([](const auto& a, const auto& b) {
-        return std::get<3>(a) < std::get<3>(b);
-    });
+    return shot_call_queue_.begin()->first - call_lead_;
 }
 
 std::string ShotCallEngine::find_available_interrupter(
@@ -412,64 +427,101 @@ PartyStatus ShotCallEngine::party_status() const
     return status;
 }
 
-bool ShotCallEngine::dispatch_next_shotcall(ch::time_point<ch::system_clock> now)
+std::vector<std::pair<std::string, std::string>> ShotCallEngine::dispatch_due_locked(
+    ch::time_point<ch::system_clock> now)
 {
-    std::unique_lock<std::mutex> lock { mtx_ };
     finalize_roster_snapshot_if_due(now, false);
-    if (shot_call_queue_.empty() || !party_size_ok_) {
-        return false;
+    if (!party_size_ok_) {
+        return { };
     }
 
-    const bool interruptable   = std::get<0>(shot_call_queue_.front());
-    const std::string enemy_id = std::get<1>(shot_call_queue_.front());
-    const std::string callout  = std::get<2>(shot_call_queue_.front());
-    const auto call_time       = std::get<3>(shot_call_queue_.front());
-    auto time_until_call       = ch::duration_cast<ch::milliseconds>(call_time - now);
-    if (time_until_call.count() < 0) {
-        shot_call_queue_.pop_front();
-        return false;
-    }
-    if (time_until_call.count() > 1000) {
-        return false;
-    }
-
-    auto enemy_it = enemy_roster_.find(enemy_id);
-    if (enemy_it == enemy_roster_.end()) {
-        shot_call_queue_.pop_front();
-        return false;
-    }
-
-    std::string available_player;
-    if (interruptable) {
-        available_player = find_available_interrupter(call_time);
-    } else {
-        if (!enemy_it->second.is_ccable) {
-            shot_call_queue_.pop_front();
-            return false;
+    std::vector<std::pair<std::string, std::string>> calls;
+    auto call_iter = shot_call_queue_.begin();
+    while (call_iter != shot_call_queue_.end()) {
+        const ScheduledShotCall call = call_iter->second;
+        auto enemy_iter              = enemy_roster_.find(call.enemy_guid);
+        if (enemy_iter == enemy_roster_.end()) {
+            call_iter = shot_call_queue_.erase(call_iter);
+            continue;
         }
-        available_player = find_available_ccer(call_time);
-    }
-    shot_call_queue_.pop_front();
-    lock.unlock();
-    if (shotcall_callback_) {
-        std::string full_callout = callout;
-        if (!available_player.empty()) {
-            full_callout = available_player + " " + callout;
-        }
-        shotcall_callback_(enemy_id, full_callout);
-    }
 
-    return true;
+        EnemyAbility* ability = find_ability(enemy_iter->second, call.spell_id, call.generation);
+        if (ability == nullptr) {
+            call_iter = shot_call_queue_.erase(call_iter);
+            continue;
+        }
+
+        if (now > call.due + late_grace_) {
+            advance_recurrence(enemy_iter->second, *ability);
+            call_iter = shot_call_queue_.erase(call_iter);
+            continue;
+        }
+        if (call.due - call_lead_ > now) {
+            break;
+        }
+
+        bool announce = true;
+        std::string available;
+        if (ability->is_interruptable) {
+            available = find_available_interrupter(call.due);
+        } else if (enemy_iter->second.is_ccable) {
+            available = find_available_ccer(call.due);
+        } else {
+            announce = false;
+        }
+        advance_recurrence(enemy_iter->second, *ability);
+        call_iter = shot_call_queue_.erase(call_iter);
+
+        if (announce) {
+            std::string full_callout = call.callout;
+            if (!available.empty()) {
+                full_callout = available + " " + full_callout;
+            }
+            calls.emplace_back(call.enemy_guid, full_callout);
+        }
+    }
+    return calls;
 }
 
-void ShotCallEngine::process_shotcalls()
+std::size_t ShotCallEngine::dispatch_due(ch::time_point<ch::system_clock> now)
 {
-    while (true) {
-        auto now = ch::system_clock::now();
-        if (!dispatch_next_shotcall(now)) {
-            std::this_thread::sleep_for(ch::milliseconds { 250 });
-        } else {
-            std::this_thread::sleep_for(ch::milliseconds { 100 });
+    std::vector<std::pair<std::string, std::string>> calls;
+    {
+        std::lock_guard<std::mutex> lock { mtx_ };
+        calls = dispatch_due_locked(now);
+    }
+
+    for (const auto& [enemy_guid, callout] : calls) {
+        if (shotcall_callback_) {
+            shotcall_callback_(enemy_guid, callout);
+        }
+    }
+    return calls.size();
+}
+
+void ShotCallEngine::process_shotcalls(std::stop_token stop_token)
+{
+    while (!stop_token.stop_requested()) {
+        std::vector<std::pair<std::string, std::string>> calls;
+        {
+            std::unique_lock<std::mutex> lock { mtx_ };
+            calls = dispatch_due_locked(ch::system_clock::now());
+
+            if (calls.empty()) {
+                const std::uint64_t revision = queue_revision_;
+                const auto changed           = [this, revision] { return queue_revision_ != revision; };
+                if (const auto deadline = next_actionable_time_locked(); deadline) {
+                    wakeup_.wait_until(lock, stop_token, *deadline, changed);
+                } else {
+                    wakeup_.wait(lock, stop_token, changed);
+                }
+            }
+        }
+
+        for (const auto& [enemy_guid, callout] : calls) {
+            if (shotcall_callback_) {
+                shotcall_callback_(enemy_guid, callout);
+            }
         }
     }
 }
@@ -514,6 +566,11 @@ void ShotCallEngine::identify_enemy(const CombatEvent& event)
         Enemy { event.source_id, std::move(spells), event.time_stamp,
             Constants::is_enemy_ccable(event.npc_id) });
     if (inserted) {
-        generate_shotcalls(enemy_iter->second);
+        Enemy& enemy = enemy_iter->second;
+        for (auto& ability : enemy.spells) {
+            ability.next_due   = enemy.first_seen_time + ability.first_cast;
+            ability.generation = 1;
+            enqueue_shotcall_locked(enemy.guid, ability);
+        }
     }
 }
