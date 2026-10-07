@@ -174,6 +174,7 @@ TEST(Parser, UnitDiedPlayerRecord_HasTenFields)
     ASSERT_TRUE(event.has_value());
     EXPECT_EQ(event->event_type, "UNIT_DIED");
     EXPECT_EQ(event->target_id, "Player-11-0E99A7E4");
+    EXPECT_EQ(event->target_name, "Lilrawb");
 }
 
 TEST(Parser, SpellCastStart_463218)

@@ -19,6 +19,8 @@ constexpr const char* COMBATANT_INFO_LINE
     = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-3676-0CD71E8D,0,18349,6177,527978,103877,0,0,0,17455,17455,17455,250,0,19997,19997,19997,3163,6188,2821,2821,2821,131649,65,[(81496,102465,1)])";
 constexpr const char* HIRED_MUSCLE_CAST_LINE
     = R"(6/14/2025 18:03:36.479-4  SPELL_CAST_START,Creature-0-4218-2661-9671-210269-0000CDF1A1,"Hired Muscle",0x10a48,0x80,0000000000000000,nil,0x80000000,0x80000000,463218,"Volatile Keg",0x4)";
+constexpr const char* HIRED_MUSCLE_DAMAGE_LINE
+    = R"(6/14/2025 18:03:38.492-4  SPELL_DAMAGE,Creature-0-4218-2661-9671-210269-0000CDF1A1,"Hired Muscle",0x10a48,0x80,Player-3676-0CD71E8D,"Bigchalupa-Area52-US",0x511,0x0,463218,"Volatile Keg",0x4,Player-3676-0CD71E8D,0000000000000000,7384075,10559560,108032,103877,131649,934,581,0,0,2416820,2500000,0,2620.45,-4892.46,2335,4.9466,680,3175485,3899633,-1,4,0,0,0,nil,nil,nil,AOE)";
 constexpr const char* SECOND_HIRED_MUSCLE_CAST_LINE
     = R"(6/14/2025 18:03:42.577-4  SPELL_CAST_START,Creature-0-4218-2661-9671-210269-00014DF1A1,"Hired Muscle",0xa48,0x0,0000000000000000,nil,0x80000000,0x80000000,463218,"Volatile Keg",0x4)";
 constexpr const char* HIRED_MUSCLE_DEATH_LINE
@@ -113,7 +115,7 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
     EXPECT_NE(callout.find("this one is going off"), std::string::npos);
 }
 
-TEST(Integration, CombatantInfoAndEnemyCast_ProducesCall)
+TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
 {
     ShotCallEngine engine;
     const auto combatant_info = parse_line(COMBATANT_INFO_LINE);
@@ -129,11 +131,36 @@ TEST(Integration, CombatantInfoAndEnemyCast_ProducesCall)
     engine.handle_event(*combatant_info);
     engine.handle_event(*cast);
 
-    int callbacks = 0;
-    engine.set_shotcall_callback([&callbacks](const std::string&, const std::string&) {
-        ++callbacks;
+    std::string callout;
+    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+        callout = text;
     });
 
     EXPECT_TRUE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
-    EXPECT_EQ(callbacks, 1);
+    // The Paladin is a valid assignee, so the fallback phrase must not appear.
+    // The name is still unknown at this point and must not be invented.
+    EXPECT_EQ(callout.find("this one is going off"), std::string::npos);
+    EXPECT_EQ(callout.find("Bigchalupa"), std::string::npos);
+}
+
+TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
+{
+    ShotCallEngine engine;
+    const auto combatant_info = parse_line(COMBATANT_INFO_LINE);
+    const auto damage         = parse_line(HIRED_MUSCLE_DAMAGE_LINE);
+    ASSERT_TRUE(combatant_info.has_value());
+    ASSERT_TRUE(damage.has_value());
+    const auto first_cast = first_cast_for("210269", 463218);
+    ASSERT_TRUE(first_cast.has_value());
+
+    engine.handle_event(*combatant_info);
+    engine.handle_event(*damage);
+
+    std::string callout;
+    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(damage->time_stamp + *first_cast));
+    EXPECT_NE(callout.find("Bigchalupa"), std::string::npos);
 }

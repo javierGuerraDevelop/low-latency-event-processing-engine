@@ -247,6 +247,7 @@ std::optional<CombatEvent> parse_line(std::string_view line)
     event.event_type   = std::string(event_type);
     event.source_id    = std::string(field_at(fields, 1));
     event.name         = strip_realm(field_at(fields, 2));
+    event.target_name  = strip_realm(field_at(fields, 6));
     event.source_flags = std::string(field_at(fields, 3));
     event.target_id    = std::string(field_at(fields, 5));
     event.npc_id       = extract_npc_id(field_at(fields, 1));
