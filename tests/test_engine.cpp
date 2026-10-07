@@ -26,6 +26,39 @@ CombatEvent make_event(const std::string& event_type, const std::string& source_
 constexpr const char* PLAYER_FLAG = "0x511";
 constexpr const char* ENEMY_FLAG  = "0xa48";
 
+// Builds a CHALLENGE_MODE_START event for the Cinderbrew Meadery fixture run.
+CombatEvent make_challenge_start(ch::system_clock::time_point ts)
+{
+    CombatEvent event;
+    event.time_stamp     = ts;
+    event.event_type     = "CHALLENGE_MODE_START";
+    event.instance_id    = 2661;
+    event.keystone_level = 13;
+    return event;
+}
+
+CombatEvent make_encounter_start(int group_size, ch::system_clock::time_point ts)
+{
+    CombatEvent event;
+    event.time_stamp   = ts;
+    event.event_type   = "ENCOUNTER_START";
+    event.encounter_id = 2900;
+    event.group_size   = group_size;
+    event.instance_id  = 2661;
+    return event;
+}
+
+CombatEvent make_combatant_info(
+    const std::string& guid, int spec_id, ch::system_clock::time_point ts)
+{
+    CombatEvent event;
+    event.time_stamp = ts;
+    event.event_type = "COMBATANT_INFO";
+    event.source_id  = guid;
+    event.spec_id    = spec_id;
+    return event;
+}
+
 // ==================== Player Identification ====================
 
 TEST(Engine, IdentifyPlayer_BattleShout_Warrior)
@@ -69,6 +102,7 @@ TEST(Engine, FirstEventInterrupt_IdentifiesWarriorAndAppliesCooldown)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Pummel (6552) arrives before any class-identifying spell.
     auto pummel = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
@@ -102,6 +136,7 @@ TEST(Engine, FirstEventCrowdControl_IdentifiesWarrior)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Shockwave (46968) is only known through the crowd-control table.
     auto shockwave = make_event("SPELL_CAST_SUCCESS", "Player-1-CCC", "Tank", PLAYER_FLAG,
@@ -126,6 +161,7 @@ TEST(Engine, UnknownFirstSpell_IgnoredUntilIdentified)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // The first event carries no class information: ignored without crashing.
     auto unknown = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Nobody", PLAYER_FLAG,
@@ -154,6 +190,7 @@ TEST(Engine, UnknownSpecCombatantInfo_DoesNotBlockIdentification)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // An unknown spec must not create a player entry that would block the
     // normal action-based identification path.
@@ -184,6 +221,7 @@ TEST(Engine, InterruptCast_PutsOnCooldown)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Identify as Warrior
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
@@ -252,6 +290,7 @@ TEST(Engine, PlayerDeath_MarkedDead)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now);
@@ -279,6 +318,7 @@ TEST(Engine, BattleRez_RevivesPlayer)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Identify Warrior
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
@@ -320,6 +360,7 @@ TEST(Engine, EnemyDeath_RemovesAndPurgesQueue)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now);
@@ -346,6 +387,7 @@ TEST(Engine, IdentifyEnemy_TrackedNPC)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // 216293 is a tracked NPC in Ara-kara
     auto ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
@@ -366,7 +408,8 @@ TEST(Engine, IdentifyEnemy_UntrackedNPC_Ignored)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
-    auto ev  = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-000000-ABC", "Mob", ENEMY_FLAG,
+    engine.handle_event(make_challenge_start(now));
+    auto ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-000000-ABC", "Mob", ENEMY_FLAG,
         "Player-1-AAA", 1, "000000", now);
     engine.handle_event(ev);
     EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 5 }));
@@ -376,7 +419,8 @@ TEST(Engine, IdentifyEnemy_EmptyNpcId_Ignored)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
-    auto ev  = make_event("SPELL_CAST_SUCCESS", "Player-1-XYZ", "Mob", ENEMY_FLAG, "Player-1-AAA", 1,
+    engine.handle_event(make_challenge_start(now));
+    auto ev = make_event("SPELL_CAST_SUCCESS", "Player-1-XYZ", "Mob", ENEMY_FLAG, "Player-1-AAA", 1,
         "", now);
     engine.handle_event(ev);
     EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 5 }));
@@ -386,6 +430,7 @@ TEST(Engine, IdentifyEnemy_DuplicateGUID_NotReidentified)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
     auto ev1 = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
         "Player-1-AAA", 434793, "216293", now);
     auto ev2 = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
@@ -399,6 +444,7 @@ TEST(Engine, IdentifyEnemy_MultipleSpells)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // NPC 214761 has two spells: Seed (23000ms cd) and Ray (10900ms cd)
     auto ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-214761-ABC", "Mob", ENEMY_FLAG,
@@ -423,6 +469,7 @@ TEST(Engine, GenerateShotcalls_CorrectCount)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // NPC 216293 has AoE Barrage: first_cast=4000ms, cd=16900ms
     // Over 5 min (300000ms): iterations = (300000/16900)+1 = 18
@@ -449,6 +496,7 @@ TEST(Engine, GenerateShotcalls_SortedByTime)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // NPC 214761 has two spells: Seed (first_cast=8300, cd=23000) and Ray (first_cast=3300,
     // cd=10900)
@@ -476,6 +524,7 @@ TEST(Engine, Dispatch_AvailableInterrupter)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now); // Warrior
@@ -499,6 +548,7 @@ TEST(Engine, Dispatch_InterrupterOnCooldown_AssignsNext)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Warrior (Tank)
     auto id1 = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG, "Player-1-BBB",
@@ -533,6 +583,7 @@ TEST(Engine, Dispatch_AllOnCooldown_GoingOff)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     auto id1 = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG, "Player-1-BBB",
         6673, "", now);
@@ -560,6 +611,7 @@ TEST(Engine, Dispatch_DeadPlayerSkipped)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now);
@@ -585,6 +637,7 @@ TEST(Engine, Dispatch_NonInterruptable_AssignsCCer)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
 
     // Warrior with CC (Shockwave/Intimidating Shout)
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
@@ -605,4 +658,266 @@ TEST(Engine, Dispatch_NonInterruptable_AssignsCCer)
     engine.dispatch_next_shotcall(now + ch::milliseconds { 8900 });
     // Warrior has CC available, should be assigned
     EXPECT_NE(last_callout.find("Tank"), std::string::npos);
+}
+
+// ==================== Run boundaries ====================
+
+TEST(Engine, EnemyEventWhileIdle_IgnoredUntilChallengeStart)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now);
+
+    engine.handle_event(enemy);
+    EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(enemy);
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+}
+
+TEST(Engine, EnemyAuraDuringRun_DoesNotEngage)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_challenge_start(now));
+
+    auto aura = make_event("SPELL_AURA_APPLIED", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now);
+    engine.handle_event(aura);
+    EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+
+    auto cast = make_event("SPELL_CAST_START", "Creature-0-0-0-0-216293-ABC", "Mob", ENEMY_FLAG,
+        "Player-1-AAA", 434793, "216293", now);
+    engine.handle_event(cast);
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+}
+
+TEST(Engine, EncounterStart_GroupSizeFiveAllowsCalls)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_encounter_start(5, now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+}
+
+TEST(Engine, EncounterStart_WrongGroupSizePausesAndValidRestores)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_encounter_start(3, now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+    EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+
+    engine.handle_event(make_encounter_start(5, now + ch::seconds { 1 }));
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+}
+
+TEST(Engine, ChallengeModeEnd_PurgesCallsAndIgnoresEndBeforeStart)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    // End before any start is a no-op.
+    engine.handle_event(make_event("CHALLENGE_MODE_END", "", "", "", "", 0, "", now));
+
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+
+    engine.handle_event(
+        make_event("CHALLENGE_MODE_END", "", "", "", "", 0, "", now + ch::seconds { 1 }));
+    EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::milliseconds { 4000 + 16900 }));
+}
+
+TEST(Engine, EncounterEnd_DoesNotPurgeChallengeQueue)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+    engine.handle_event(make_encounter_start(5, now));
+    engine.handle_event(make_event("ENCOUNTER_END", "", "", "", "", 0, "", now + ch::seconds { 1 }));
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+}
+
+TEST(Engine, ZoneChangeWhileEncounterActive_EndsRun)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_encounter_start(5, now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    auto zone        = make_event("ZONE_CHANGE", "", "", "", "", 0, "", now + ch::seconds { 1 });
+    zone.instance_id = 9999;
+    engine.handle_event(zone);
+
+    EXPECT_FALSE(engine.dispatch_next_shotcall(now + ch::seconds { 4 }));
+    EXPECT_FALSE(engine.party_status().in_run);
+}
+
+// ==================== Roster snapshot and party status ====================
+
+TEST(Engine, PartyStatus_FivePlayerSnapshot)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+
+    engine.handle_event(make_combatant_info("Player-1-PALA", 65, now + ch::milliseconds { 1 }));
+    engine.handle_event(make_combatant_info("Player-1-DK", 252, now + ch::milliseconds { 1 }));
+    engine.handle_event(make_combatant_info("Player-1-WAR", 73, now + ch::milliseconds { 1 }));
+    engine.handle_event(make_combatant_info("Player-1-SHA", 262, now + ch::milliseconds { 1 }));
+    engine.handle_event(make_combatant_info("Player-1-WLK", 267, now + ch::milliseconds { 1 }));
+
+    // A later non-COMBATANT_INFO event finalizes the snapshot.
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-PALA", "Pala", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 19750, "", now + ch::milliseconds { 2 }));
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.roster_known);
+    EXPECT_TRUE(status.in_run);
+    EXPECT_EQ(status.identified, 5);
+    EXPECT_EQ(status.expected, 5);
+}
+
+TEST(Engine, PartyStatus_SnapshotWithFourPlayersReportsGap)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+
+    engine.handle_event(make_combatant_info("Player-1-A", 65, now));
+    engine.handle_event(make_combatant_info("Player-1-B", 252, now));
+    engine.handle_event(make_combatant_info("Player-1-C", 73, now));
+    engine.handle_event(make_combatant_info("Player-1-D", 999999, now));
+
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-A", "A", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6673, "", now + ch::milliseconds { 1 }));
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.roster_known);
+    EXPECT_EQ(status.identified, 3);
+    EXPECT_EQ(status.expected, 4);
+}
+
+TEST(Engine, PartyStatus_NoSnapshotIsNotKnown)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+
+    // Without COMBATANT_INFO the first event resolves the snapshot as unknown.
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-A", "A", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6673, "", now));
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_FALSE(status.roster_known);
+    EXPECT_EQ(status.expected, 5);
+}
+
+TEST(Engine, PartyStatus_SnapshotFinalizesWhenWindowElapses)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_combatant_info("Player-1-A", 65, now));
+    engine.handle_event(make_combatant_info("Player-1-B", 252, now));
+
+    // Before the window closes the snapshot is still pending.
+    engine.dispatch_next_shotcall(now + ch::milliseconds { 499 });
+    EXPECT_FALSE(engine.party_status().roster_known);
+
+    // The scheduler tick with a later now finalizes it without another event.
+    engine.dispatch_next_shotcall(now + ch::milliseconds { 501 });
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.roster_known);
+    EXPECT_EQ(status.identified, 2);
+    EXPECT_EQ(status.expected, 2);
+}
+
+TEST(Engine, PartyStatus_CombatLogVersionRecordsAdvancedLogging)
+{
+    ShotCallEngine engine;
+
+    auto version             = make_event("COMBAT_LOG_VERSION", "", "", "", "", 0);
+    version.advanced_logging = true;
+    engine.handle_event(version);
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.advanced_logging);
+    EXPECT_FALSE(status.in_run);
+}
+
+TEST(Engine, ClassKnowledgeSurvivesBetweenKeys)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_combatant_info("Player-1-PALA", 65, now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-PALA", "Pala", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 19750, "", now + ch::milliseconds { 1 }));
+    engine.handle_event(
+        make_event("CHALLENGE_MODE_END", "", "", "", "", 0, "", now + ch::seconds { 5 }));
+
+    const auto key_two = now + ch::seconds { 10 };
+    engine.handle_event(make_challenge_start(key_two));
+    engine.handle_event(make_combatant_info("Player-1-PALA", 65, key_two));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-PALA", "Pala", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 19750, "", key_two + ch::milliseconds { 1 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }));
+    EXPECT_NE(callout.find("Pala"), std::string::npos);
+}
+
+TEST(Engine, PreviousRunPlayerNotInSnapshotIsNotAssigned)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-OLD", "OldTank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(
+        make_event("CHALLENGE_MODE_END", "", "", "", "", 0, "", now + ch::seconds { 5 }));
+
+    const auto key_two = now + ch::seconds { 10 };
+    engine.handle_event(make_challenge_start(key_two));
+    engine.handle_event(make_combatant_info("Player-1-PALA", 65, key_two));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-PALA", "Pala", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 19750, "", key_two + ch::milliseconds { 1 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
+
+    std::string callout;
+    engine.set_shotcall_callback([&](const std::string&, const std::string& text) {
+        callout = text;
+    });
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }));
+    EXPECT_NE(callout.find("Pala"), std::string::npos);
+    EXPECT_EQ(callout.find("OldTank"), std::string::npos);
 }

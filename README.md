@@ -11,6 +11,19 @@ WoW Combat Log → C++ Engine → TCP Socket → Discord Bot → ElevenLabs TTS 
 - **C++ engine** — Tail-follows the combat log, identifies players/enemies from spells, generates a time-sorted queue of upcoming ability casts, and dispatches callouts assigning the best available interrupter or CCer.
 - **Discord bot** — Python bot that receives callouts over TCP (port 9999) and plays them as TTS audio using ElevenLabs.
 
+## Run boundaries and roster
+
+The engine reacts to the run boundaries present in `WoWCombatLog.txt`:
+
+- `CHALLENGE_MODE_START` / `CHALLENGE_MODE_END` — start and end a Mythic+ run. Starting a run clears tracked enemies and queued calls and begins a fresh roster snapshot; known player classes persist across runs.
+- `ENCOUNTER_START` / `ENCOUNTER_END` — start and end a boss encounter. A group size other than 5 pauses shotcalls until a valid encounter starts.
+- `ZONE_CHANGE` — leaving the zone while an encounter is active ends the run.
+- `COMBAT_LOG_VERSION` — records whether advanced combat logging is enabled.
+
+Enemy timelines only start from hostile actions (`SPELL_CAST_START`, `SPELL_CAST_SUCCESS`, damage and swing events) during an active run; auras and idle casts do not engage.
+
+The log has no party-join, ready-check, or pull-timer events. Party membership comes from `COMBATANT_INFO` records, which are written one per player at each boundary when advanced combat logging is enabled. The engine collects them into a current-run roster for 500 ms (or until the next non-`COMBATANT_INFO` event) and reports the result through `PartyStatus`; without `COMBATANT_INFO` it falls back to action-based identification and `ENCOUNTER_START` group size.
+
 ## Build
 
 ```bash

@@ -13,10 +13,20 @@ namespace ch = std::chrono;
 namespace {
 
 // Literal records from text_files/combat_log_large.txt (Cinderbrew Meadery).
+constexpr const char* CHALLENGE_MODE_START_LINE
+    = R"(6/14/2025 18:03:13.665-4  CHALLENGE_MODE_START,"Cinderbrew Meadery",2661,506,13,[9,10,147])";
 constexpr const char* SKYFURY_LINE
     = R"(6/14/2025 18:02:53.252-4  SPELL_CAST_SUCCESS,Player-11-0E99A7E4,"Lilrawb-Tichondrius-US",0x512,0x0,Player-11-0E99A7E4,"Lilrawb-Tichondrius-US",0x512,0x0,462854,"Skyfury",0x8,Player-11-0E99A7E4,0000000000000000,10876976,10876976,27212,99534,89207,679,300,0,0,2365840,2500000,25000,2650.96,-4852.19,2335,4.7281,679)";
-constexpr const char* COMBATANT_INFO_LINE
+constexpr const char* COMBATANT_INFO_PALADIN_LINE
     = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-3676-0CD71E8D,0,18349,6177,527978,103877,0,0,0,17455,17455,17455,250,0,19997,19997,19997,3163,6188,2821,2821,2821,131649,65,[(81496,102465,1)])";
+constexpr const char* COMBATANT_INFO_DK_LINE
+    = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-1427-0860A3DB,0,78465,14644,556659,9528,0,0,0,4029,4029,4029,0,2040,26272,26272,26272,545,22003,4688,4688,4688,74678,252,[(76044,96172,1)])";
+constexpr const char* COMBATANT_INFO_WARLOCK_LINE
+    = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-76-0BED3564,1,6704,13590,523669,97197,0,0,0,11793,11793,11793,0,0,18991,18991,18991,1635,13693,5141,5141,5141,39210,267,[(71939,91427,1)])";
+constexpr const char* COMBATANT_INFO_WARRIOR_LINE
+    = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-1427-0E1E8D11,0,80740,12173,770240,11999,0,15255,0,15255,15255,15255,783,3348,22174,22174,22174,1090,3500,9001,9001,9001,194691,73,[(90450,112110,1)])";
+constexpr const char* COMBATANT_INFO_SHAMAN_LINE
+    = R"(6/14/2025 18:03:13.666-4  COMBATANT_INFO,Player-11-0E99A7E4,1,7590,17645,494408,99534,0,0,0,6172,6172,6172,0,0,17353,17353,17353,1635,20821,5300,5300,5300,89207,262,[(80981,101849,1)])";
 constexpr const char* HIRED_MUSCLE_CAST_LINE
     = R"(6/14/2025 18:03:36.479-4  SPELL_CAST_START,Creature-0-4218-2661-9671-210269-0000CDF1A1,"Hired Muscle",0x10a48,0x80,0000000000000000,nil,0x80000000,0x80000000,463218,"Volatile Keg",0x4)";
 constexpr const char* HIRED_MUSCLE_DAMAGE_LINE
@@ -45,11 +55,14 @@ std::optional<ch::milliseconds> first_cast_for(std::string_view enemy_id, int sp
 TEST(Integration, EnemyCast_QueuesCall)
 {
     ShotCallEngine engine;
-    const auto cast = parse_line(HIRED_MUSCLE_CAST_LINE);
+    const auto challenge = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto cast      = parse_line(HIRED_MUSCLE_CAST_LINE);
+    ASSERT_TRUE(challenge.has_value());
     ASSERT_TRUE(cast.has_value());
     const auto first_cast = first_cast_for("210269", 463218);
     ASSERT_TRUE(first_cast.has_value());
 
+    engine.handle_event(*challenge);
     engine.handle_event(*cast);
 
     std::string callout;
@@ -64,13 +77,16 @@ TEST(Integration, EnemyCast_QueuesCall)
 TEST(Integration, EnemyDeath_PurgesQueuedCalls)
 {
     ShotCallEngine engine;
-    const auto cast  = parse_line(HIRED_MUSCLE_CAST_LINE);
-    const auto death = parse_line(HIRED_MUSCLE_DEATH_LINE);
+    const auto challenge = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto cast      = parse_line(HIRED_MUSCLE_CAST_LINE);
+    const auto death     = parse_line(HIRED_MUSCLE_DEATH_LINE);
+    ASSERT_TRUE(challenge.has_value());
     ASSERT_TRUE(cast.has_value());
     ASSERT_TRUE(death.has_value());
     const auto first_cast = first_cast_for("210269", 463218);
     ASSERT_TRUE(first_cast.has_value());
 
+    engine.handle_event(*challenge);
     engine.handle_event(*cast);
     engine.handle_event(*death);
 
@@ -87,10 +103,14 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
 {
     ShotCallEngine engine;
     const auto skyfury     = parse_line(SKYFURY_LINE);
+    const auto challenge   = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto combatant   = parse_line(COMBATANT_INFO_SHAMAN_LINE);
     const auto first_cast  = parse_line(HIRED_MUSCLE_CAST_LINE);
     const auto second_cast = parse_line(SECOND_HIRED_MUSCLE_CAST_LINE);
     const auto death       = parse_line(PLAYER_DEATH_LINE);
     ASSERT_TRUE(skyfury.has_value());
+    ASSERT_TRUE(challenge.has_value());
+    ASSERT_TRUE(combatant.has_value());
     ASSERT_TRUE(first_cast.has_value());
     ASSERT_TRUE(second_cast.has_value());
     ASSERT_TRUE(death.has_value());
@@ -98,6 +118,8 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
     ASSERT_TRUE(first_cast_delay.has_value());
 
     engine.handle_event(*skyfury);
+    engine.handle_event(*challenge);
+    engine.handle_event(*combatant);
     engine.handle_event(*first_cast);
 
     std::string callout;
@@ -118,8 +140,10 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
 TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
 {
     ShotCallEngine engine;
-    const auto combatant_info = parse_line(COMBATANT_INFO_LINE);
+    const auto challenge      = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto combatant_info = parse_line(COMBATANT_INFO_PALADIN_LINE);
     const auto cast           = parse_line(HIRED_MUSCLE_CAST_LINE);
+    ASSERT_TRUE(challenge.has_value());
     ASSERT_TRUE(combatant_info.has_value());
     ASSERT_TRUE(cast.has_value());
     const auto first_cast = first_cast_for("210269", 463218);
@@ -128,6 +152,7 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
     EXPECT_EQ(combatant_info->source_id, "Player-3676-0CD71E8D");
     EXPECT_EQ(combatant_info->spec_id, 65);
 
+    engine.handle_event(*challenge);
     engine.handle_event(*combatant_info);
     engine.handle_event(*cast);
 
@@ -141,18 +166,26 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
     // The name is still unknown at this point and must not be invented.
     EXPECT_EQ(callout.find("this one is going off"), std::string::npos);
     EXPECT_EQ(callout.find("Bigchalupa"), std::string::npos);
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.roster_known);
+    EXPECT_EQ(status.identified, 1);
+    EXPECT_EQ(status.expected, 1);
 }
 
 TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
 {
     ShotCallEngine engine;
-    const auto combatant_info = parse_line(COMBATANT_INFO_LINE);
+    const auto challenge      = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto combatant_info = parse_line(COMBATANT_INFO_PALADIN_LINE);
     const auto damage         = parse_line(HIRED_MUSCLE_DAMAGE_LINE);
+    ASSERT_TRUE(challenge.has_value());
     ASSERT_TRUE(combatant_info.has_value());
     ASSERT_TRUE(damage.has_value());
     const auto first_cast = first_cast_for("210269", 463218);
     ASSERT_TRUE(first_cast.has_value());
 
+    engine.handle_event(*challenge);
     engine.handle_event(*combatant_info);
     engine.handle_event(*damage);
 
@@ -163,4 +196,41 @@ TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
 
     EXPECT_TRUE(engine.dispatch_next_shotcall(damage->time_stamp + *first_cast));
     EXPECT_NE(callout.find("Bigchalupa"), std::string::npos);
+}
+
+TEST(Integration, ChallengeRosterSnapshotCompletes)
+{
+    ShotCallEngine engine;
+    const auto challenge    = parse_line(CHALLENGE_MODE_START_LINE);
+    const auto paladin      = parse_line(COMBATANT_INFO_PALADIN_LINE);
+    const auto death_knight = parse_line(COMBATANT_INFO_DK_LINE);
+    const auto warlock      = parse_line(COMBATANT_INFO_WARLOCK_LINE);
+    const auto warrior      = parse_line(COMBATANT_INFO_WARRIOR_LINE);
+    const auto shaman       = parse_line(COMBATANT_INFO_SHAMAN_LINE);
+    const auto cast         = parse_line(HIRED_MUSCLE_CAST_LINE);
+    ASSERT_TRUE(challenge.has_value());
+    ASSERT_TRUE(paladin.has_value());
+    ASSERT_TRUE(death_knight.has_value());
+    ASSERT_TRUE(warlock.has_value());
+    ASSERT_TRUE(warrior.has_value());
+    ASSERT_TRUE(shaman.has_value());
+    ASSERT_TRUE(cast.has_value());
+    const auto first_cast = first_cast_for("210269", 463218);
+    ASSERT_TRUE(first_cast.has_value());
+
+    engine.handle_event(*challenge);
+    engine.handle_event(*paladin);
+    engine.handle_event(*death_knight);
+    engine.handle_event(*warlock);
+    engine.handle_event(*warrior);
+    engine.handle_event(*shaman);
+    engine.handle_event(*cast);
+
+    const PartyStatus status = engine.party_status();
+    EXPECT_TRUE(status.roster_known);
+    EXPECT_TRUE(status.in_run);
+    EXPECT_EQ(status.identified, 5);
+    EXPECT_EQ(status.expected, 5);
+
+    EXPECT_TRUE(engine.dispatch_next_shotcall(cast->time_stamp + *first_cast));
 }
