@@ -53,7 +53,7 @@ void initialize_player_abilities(Player& player, const std::string& class_name)
 
 void ShotCallEngine::handle_event(const CombatEvent& event)
 {
-    std::lock_guard<std::mutex> lock(mtx_);
+    std::lock_guard<std::mutex> lock { mtx_ };
     learn_player_name(event.source_id, event.name);
     learn_player_name(event.target_id, event.target_name);
 
@@ -147,7 +147,7 @@ void ShotCallEngine::handle_combatant_info(const CombatEvent& event)
     }
     player.class_name = class_name;
     player.spec_id    = event.spec_id;
-    player.spec_name  = std::string(Constants::get_spec_name(event.spec_id));
+    player.spec_name  = std::string { Constants::get_spec_name(event.spec_id) };
 }
 
 void ShotCallEngine::learn_player_name(const std::string& guid, std::string_view name)
@@ -158,7 +158,7 @@ void ShotCallEngine::learn_player_name(const std::string& guid, std::string_view
 
     const auto player_iter = roster_.find(guid);
     if (player_iter != roster_.end() && player_iter->second.name.empty()) {
-        player_iter->second.name = std::string(name);
+        player_iter->second.name = std::string { name };
     }
 }
 
@@ -177,7 +177,7 @@ void ShotCallEngine::generate_shotcalls(Enemy& enemy)
             if (j == 0) {
                 duration = enemy.spells.at(i).first_cast;
             } else {
-                duration = enemy.spells.at(i).first_cast + ch::milliseconds(j * cd_ms);
+                duration = enemy.spells.at(i).first_cast + ch::milliseconds { j * cd_ms };
             }
 
             std::tuple<bool, std::string, std::string, ch::time_point<ch::system_clock>> shotcall {
@@ -232,7 +232,7 @@ void ShotCallEngine::set_shotcall_callback(
 
 bool ShotCallEngine::dispatch_next_shotcall(ch::time_point<ch::system_clock> now)
 {
-    std::unique_lock<std::mutex> lock(mtx_);
+    std::unique_lock<std::mutex> lock { mtx_ };
     if (shot_call_queue_.empty()) {
         return false;
     }
@@ -284,9 +284,9 @@ void ShotCallEngine::process_shotcalls()
     while (true) {
         auto now = ch::system_clock::now();
         if (!dispatch_next_shotcall(now)) {
-            std::this_thread::sleep_for(ch::milliseconds(250));
+            std::this_thread::sleep_for(ch::milliseconds { 250 });
         } else {
-            std::this_thread::sleep_for(ch::milliseconds(100));
+            std::this_thread::sleep_for(ch::milliseconds { 100 });
         }
     }
 }
@@ -295,10 +295,10 @@ void ShotCallEngine::identify_player(const CombatEvent& event)
 {
     std::string class_name { Constants::get_class_from_identifying_spells(event.spell_id) };
     if (class_name.empty()) {
-        class_name = std::string(Constants::get_class_from_interrupt_spell(event.spell_id));
+        class_name = std::string { Constants::get_class_from_interrupt_spell(event.spell_id) };
     }
     if (class_name.empty()) {
-        class_name = std::string(Constants::get_class_from_cc_spell(event.spell_id));
+        class_name = std::string { Constants::get_class_from_cc_spell(event.spell_id) };
     }
     if (class_name.empty()) {
         return;
@@ -320,8 +320,8 @@ void ShotCallEngine::identify_enemy(const CombatEvent& event)
     std::vector<EnemyAbility> spells;
     for (const auto& entry : Constants::enemy_data) {
         if (entry.enemy_id == event.npc_id) {
-            spells.emplace_back(entry.spell_id, ch::milliseconds(entry.first_cast_ms),
-                ch::milliseconds(entry.cooldown_ms), std::string(entry.callout),
+            spells.emplace_back(entry.spell_id, ch::milliseconds { entry.first_cast_ms },
+                ch::milliseconds { entry.cooldown_ms }, std::string { entry.callout },
                 entry.is_interruptable);
         }
     }
