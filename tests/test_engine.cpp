@@ -12,14 +12,14 @@ CombatEvent make_event(const std::string& event_type, const std::string& source_
     ch::system_clock::time_point ts = ch::system_clock::now())
 {
     CombatEvent ev { };
-    ev.time_stamp       = ts;
-    ev.event_type       = event_type;
-    ev.name             = name;
-    ev.source_id        = source_id;
-    ev.target_id        = target_id;
-    ev.source_raid_flag = source_flag;
-    ev.spell_id         = spell_id;
-    ev.npc_id           = npc_id;
+    ev.time_stamp   = ts;
+    ev.event_type   = event_type;
+    ev.name         = name;
+    ev.source_id    = source_id;
+    ev.target_id    = target_id;
+    ev.source_flags = source_flag;
+    ev.spell_id     = spell_id;
+    ev.npc_id       = npc_id;
     return ev;
 }
 

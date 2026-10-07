@@ -14,7 +14,7 @@ bool is_cast_by_party_member(const CombatEvent& event)
     // A party member player has TYPE_PLAYER set and either MINE or PARTY affiliation
     unsigned long flag = 0;
     try {
-        flag = std::stoul(event.source_raid_flag, nullptr, 16);
+        flag = std::stoul(event.source_flags, nullptr, 16);
     } catch (...) {
         return false;
     }

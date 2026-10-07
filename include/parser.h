@@ -1,30 +1,38 @@
-// Parses WoW combat log lines into structured CombatEvent data.
-// Each line contains a timestamp, event type, source/target GUIDs, flags,
-// and spell information. The parser extracts NPC IDs from Creature GUIDs
-// for enemy identification.
+// Parses WoW combat log lines into structured CombatEvent data. Handles the
+// variable-length records (including 10-field death records), quote-aware
+// fields, boundary metadata, and COMBATANT_INFO snapshots.
 
 #ifndef SHOTCALLERCPP_PARSER_H
 #define SHOTCALLERCPP_PARSER_H
 
 #include <chrono>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <optional>
 #include <string>
-#include <vector>
+#include <string_view>
 
 struct CombatEvent {
-    std::chrono::system_clock::time_point time_stamp;
+    std::chrono::system_clock::time_point time_stamp { };
     std::string event_type;
     std::string name;
     std::string source_id;
     std::string target_id;
-    std::string source_raid_flag;
-    std::string spell_name;
+    std::string source_flags;
     std::string npc_id;
-    int spell_id;
+    int spell_id { 0 };
+    int interrupted_spell_id { 0 };
+    int spec_id { 0 };
+    int encounter_id { 0 };
+    int group_size { 0 };
+    int instance_id { 0 };
+    int keystone_level { 0 };
+    bool advanced_logging { false };
 };
 
-CombatEvent parse_line(const std::string& string);
+// Parses "M/D/YYYY H:MM:SS.mmm±H[.5]" as a UTC system_clock time point.
+// Returns nullopt when the timestamp or its offset is malformed.
+std::optional<std::chrono::system_clock::time_point> parse_timestamp(std::string_view timestamp);
+
+// Parses one combat-log line. Returns nullopt for empty or malformed input.
+std::optional<CombatEvent> parse_line(std::string_view line);
 
 #endif // SHOTCALLERCPP_PARSER_H
