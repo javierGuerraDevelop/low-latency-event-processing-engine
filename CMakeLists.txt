@@ -60,6 +60,7 @@ add_executable(ShotCallerTests
     tests/test_constants.cpp
     tests/test_parser.cpp
     tests/test_engine.cpp
+    tests/test_integration.cpp
 )
 target_link_libraries(ShotCallerTests PRIVATE ShotCallerLib GTest::gtest_main
                                              shotcaller_warnings)

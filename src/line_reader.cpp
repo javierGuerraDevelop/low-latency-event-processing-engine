@@ -61,9 +61,8 @@ void monitor_file(const std::string& filename, ShotCallEngine& engine)
             if (line.empty()) {
                 continue;
             }
-            CombatEvent event { parse_line(line) };
-            if (!event.event_type.empty()) {
-                engine.handle_event(event);
+            if (auto event = parse_line(line)) {
+                engine.handle_event(*event);
             }
         } else {
             log_file.clear();
