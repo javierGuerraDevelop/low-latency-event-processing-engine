@@ -64,11 +64,11 @@ struct Player {
     std::string guid;
     std::string name;
     std::string class_name;
-    int spec_id { 0 };
+    int spec_id = 0;
     std::string spec_name;
     AbilityState interrupt;
     std::map<int, AbilityState> crowd_control;
-    bool is_alive { true };
+    bool is_alive = true;
 
     Player(std::string player_guid, std::string player_name, std::string player_class,
         AbilityState interrupt_ability, std::map<int, AbilityState> crowd_control_abilities)
@@ -88,7 +88,7 @@ struct Enemy {
     std::string guid;
     std::vector<EnemyAbility> spells;
     ch::time_point<ch::system_clock> first_seen_time;
-    bool is_ccable { false };
+    bool is_ccable = false;
 
     Enemy(std::string enemy_guid, std::vector<EnemyAbility> abilities,
         ch::time_point<ch::system_clock> first_seen, bool ccable)

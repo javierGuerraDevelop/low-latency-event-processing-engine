@@ -67,7 +67,7 @@ void monitor_file(const std::string& filename, ShotCallEngine& engine)
         } else {
             log_file.clear();
             log_file.seekg(0, std::ios::cur);
-            std::this_thread::sleep_for(ch::milliseconds(250));
+            std::this_thread::sleep_for(ch::milliseconds { 250 });
         }
     }
 }

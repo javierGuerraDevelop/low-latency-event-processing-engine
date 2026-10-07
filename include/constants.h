@@ -11,7 +11,7 @@
 
 namespace Constants {
 
-inline constexpr std::array<std::pair<int, std::string_view>, 27> identifying_spells { {
+inline constexpr std::array<std::pair<int, std::string_view>, 27> identifying_spells = { {
     // Death Knight
     { 48743, "Death Knight" }, // Death's Advance (all specs, movement)
     { 48707, "Death Knight" }, // Anti-Magic Shell (all specs, defensive)
@@ -66,7 +66,7 @@ constexpr std::string_view get_class_from_identifying_spells(int spell_id)
 }
 
 // Current spec IDs mapped to class and to the combined "Spec Class" name.
-inline constexpr std::array<std::tuple<int, std::string_view, std::string_view>, 40> spec_data { {
+inline constexpr std::array<std::tuple<int, std::string_view, std::string_view>, 40> spec_data = { {
     { 250, "Death Knight", "Blood Death Knight" },
     { 251, "Death Knight", "Frost Death Knight" },
     { 252, "Death Knight", "Unholy Death Knight" },
@@ -133,7 +133,7 @@ constexpr std::string_view get_spec_name(int spec_id)
     return "";
 }
 
-inline constexpr std::array<std::string_view, 38> ignorable_events {
+inline constexpr std::array<std::string_view, 38> ignorable_events = {
     "RANGE_DAMAGE",
     "RANGE_MISSED",
     "SPELL_AURA_APPLIED",
@@ -186,7 +186,7 @@ constexpr bool is_ignorable_event(std::string_view event)
 }
 
 inline constexpr std::array<std::tuple<std::string_view, int, std::chrono::seconds>, 14>
-    interrupt_data { {
+    interrupt_data = { {
         { "Death Knight", 47528, std::chrono::seconds { 15 } }, // Mind Freeze
         { "Demon Hunter", 183752, std::chrono::seconds { 15 } }, // Disrupt
         { "Druid", 106839, std::chrono::seconds { 15 } }, // Skull Bash (Main kick)
@@ -239,7 +239,7 @@ constexpr std::string_view get_class_from_interrupt_spell(int spell_id)
 
 inline constexpr std::array<
     std::tuple<std::string_view, std::string_view, int, std::chrono::seconds>, 29>
-    crowd_control_data {
+    crowd_control_data = {
         { { "Death Knight", "Blinding Sleet", 207127, std::chrono::seconds { 60 } },
             { "Death Knight", "Gorefiend's Grasp", 207167, std::chrono::seconds { 90 } },
             { "Demon Hunter", "Chaos Nova", 179057, std::chrono::seconds { 60 } },
@@ -283,7 +283,7 @@ constexpr std::string_view get_class_from_cc_spell(int spell_id)
     return "";
 }
 
-inline constexpr std::array<int, 5> battle_rez_ids { 10609, 376999, 20707, 61999, 407133 };
+inline constexpr std::array<int, 5> battle_rez_ids = { 10609, 376999, 20707, 61999, 407133 };
 
 constexpr bool is_battle_rez(int spell_id)
 {
@@ -305,7 +305,7 @@ struct EnemySpellEntry {
     bool is_ccable;
 };
 
-inline constexpr std::array<EnemySpellEntry, 54> enemy_data { {
+inline constexpr std::array<EnemySpellEntry, 54> enemy_data = { {
     // Eco-dome
     { "245092", 1215850, 20000, 37000, "AoE", false, true },
     { "234883", 1221152, 6500, 18200, "AoE", false, true },
