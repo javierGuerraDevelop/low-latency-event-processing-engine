@@ -11,6 +11,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -69,6 +70,8 @@ struct Player {
     AbilityState interrupt;
     std::map<int, AbilityState> crowd_control;
     bool is_alive = true;
+    // Timestamp of the most recent event carrying this player's GUID.
+    ch::time_point<ch::system_clock> last_seen { };
 
     Player(std::string player_guid, std::string player_name, std::string player_class,
         AbilityState interrupt_ability, std::map<int, AbilityState> crowd_control_abilities)
@@ -100,6 +103,19 @@ struct Enemy {
     }
 };
 
+// Whether a Mythic+ challenge is active; encounter state is tracked separately.
+enum class RunState { Idle,
+    ChallengeActive };
+
+// Snapshot of party identification state for status reporting.
+struct PartyStatus {
+    int identified        = 0;
+    int expected          = 0;
+    bool roster_known     = false;
+    bool advanced_logging = false;
+    bool in_run           = false;
+};
+
 class ShotCallEngine {
 public:
     // Routes incoming combat events to the appropriate handler.
@@ -111,6 +127,8 @@ public:
     // Acquires mtx_ itself. Dispatches the next shotcall if one is due and
     // returns true when a callback was invoked.
     bool dispatch_next_shotcall(ch::time_point<ch::system_clock> now);
+    // Returns a snapshot of party identification state.
+    PartyStatus party_status() const;
 
 private:
     // Handlers and helpers below assume mtx_ is already held.
@@ -118,6 +136,19 @@ private:
     void handle_enemy_event(const CombatEvent& event);
     void handle_death(const CombatEvent& event);
     void handle_combatant_info(const CombatEvent& event);
+    // Applies challenge/encounter boundaries. Returns true when consumed.
+    bool handle_boundary_event(const CombatEvent& event);
+    // Starts collecting a COMBATANT_INFO snapshot for the current boundary.
+    void begin_roster_snapshot(ch::time_point<ch::system_clock> started_at);
+    void reset_roster_snapshot();
+    // Records the snapshot once its window closes or another event follows.
+    void finalize_roster_snapshot_if_due(ch::time_point<ch::system_clock> now, bool event_followed);
+    // True while a challenge or encounter is active.
+    bool in_active_run() const;
+    // True when the player belongs to the current run's roster.
+    bool player_in_current_run(const std::string& guid, const Player& player) const;
+    // Drops tracked enemies and their queued calls.
+    void clear_enemies_and_calls();
     // Auto-detects player class or enemy type from combat event spells.
     void identify_player(const CombatEvent& event);
     void identify_enemy(const CombatEvent& event);
@@ -131,12 +162,22 @@ private:
     std::string find_available_ccer(const ch::time_point<ch::system_clock>& call_time);
 
     std::function<void(const std::string&, const std::string&)> shotcall_callback_;
-    std::mutex mtx_; // Guards all mutable state below
+    mutable std::mutex mtx_; // Guards all mutable state below
     std::map<std::string, Player> roster_;
     std::map<std::string, Enemy> enemy_roster_;
+    std::set<std::string> run_roster_;
     // Queue entries: (is_interruptable, enemy_guid, callout_text, scheduled_time)
     std::list<std::tuple<bool, std::string, std::string, ch::time_point<ch::system_clock>>>
         shot_call_queue_;
+    RunState run_state_           = RunState::Idle;
+    bool encounter_active_        = false;
+    bool party_size_ok_           = true;
+    bool roster_snapshot_known_   = false;
+    bool roster_snapshot_pending_ = false;
+    ch::time_point<ch::system_clock> roster_snapshot_started_at_ { };
+    bool advanced_logging_ = false;
+    ch::time_point<ch::system_clock> run_started_at_ { };
+    int current_zone_id_ = 0;
 };
 
 #endif // SHOTCALLERCPP_ENGINE_H

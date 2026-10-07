@@ -1,8 +1,11 @@
 #include "engine.h"
 
+#include <array>
 #include <chrono>
+#include <iostream>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <utility>
@@ -13,6 +16,10 @@
 namespace ch = std::chrono;
 
 namespace {
+
+// How long a boundary keeps collecting COMBATANT_INFO records before the
+// snapshot is finalized.
+constexpr ch::milliseconds roster_snapshot_window { 500 };
 
 // WoW unit flags: 0x1 = MINE, 0x2 = PARTY, 0x400 = TYPE_PLAYER. A party member
 // has TYPE_PLAYER set and either MINE or PARTY affiliation.
@@ -27,6 +34,28 @@ bool is_cast_by_party_member(const CombatEvent& event)
     const bool is_player        = (flag & 0x400) != 0;
     const bool is_party_or_mine = (flag & 0x3) != 0;
     return is_player && is_party_or_mine;
+}
+
+// Enemy events that can start a timeline; auras and idle casts do not engage.
+bool is_hostile_action(std::string_view event_type)
+{
+    constexpr std::array<std::string_view, 9> hostile_actions = {
+        "SPELL_CAST_START",
+        "SPELL_CAST_SUCCESS",
+        "SPELL_DAMAGE",
+        "SPELL_MISSED",
+        "SPELL_PERIODIC_DAMAGE",
+        "SWING_DAMAGE",
+        "SWING_MISSED",
+        "RANGE_DAMAGE",
+        "RANGE_MISSED",
+    };
+    for (const auto& action : hostile_actions) {
+        if (action == event_type) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Builds the class's crowd-control abilities with zeroed cooldowns.
@@ -57,8 +86,16 @@ void ShotCallEngine::handle_event(const CombatEvent& event)
     learn_player_name(event.source_id, event.name);
     learn_player_name(event.target_id, event.target_name);
 
+    if (event.event_type != "COMBATANT_INFO") {
+        finalize_roster_snapshot_if_due(event.time_stamp, true);
+    }
+
     if (event.event_type == "UNIT_DIED" || event.event_type == "UNIT_DESTROYED") {
         handle_death(event);
+        return;
+    }
+
+    if (handle_boundary_event(event)) {
         return;
     }
 
@@ -72,6 +109,115 @@ void ShotCallEngine::handle_event(const CombatEvent& event)
     } else {
         handle_enemy_event(event);
     }
+}
+
+bool ShotCallEngine::handle_boundary_event(const CombatEvent& event)
+{
+    if (event.event_type == "CHALLENGE_MODE_START") {
+        clear_enemies_and_calls();
+        run_state_      = RunState::ChallengeActive;
+        run_started_at_ = event.time_stamp;
+        party_size_ok_  = true;
+        begin_roster_snapshot(event.time_stamp);
+        return true;
+    }
+
+    if (event.event_type == "CHALLENGE_MODE_END") {
+        // The fixture contains an end-before-start pair; ignore it when idle.
+        if (run_state_ == RunState::Idle) {
+            return true;
+        }
+        clear_enemies_and_calls();
+        run_state_        = RunState::Idle;
+        encounter_active_ = false;
+        party_size_ok_    = true;
+        reset_roster_snapshot();
+        return true;
+    }
+
+    if (event.event_type == "ENCOUNTER_START") {
+        encounter_active_ = true;
+        begin_roster_snapshot(event.time_stamp);
+        party_size_ok_ = event.group_size == 5;
+        if (!party_size_ok_) {
+            std::cerr << "Encounter started with group size " << event.group_size
+                      << " (expected 5); pausing shotcalls." << std::endl;
+        }
+        return true;
+    }
+
+    if (event.event_type == "ENCOUNTER_END") {
+        encounter_active_ = false;
+        return true;
+    }
+
+    if (event.event_type == "ZONE_CHANGE") {
+        const bool zone_changed = event.instance_id != current_zone_id_;
+        const bool in_challenge = run_state_ == RunState::ChallengeActive;
+        if (zone_changed && encounter_active_ && !in_challenge) {
+            clear_enemies_and_calls();
+            encounter_active_ = false;
+            party_size_ok_    = true;
+            reset_roster_snapshot();
+        }
+        current_zone_id_ = event.instance_id;
+        return true;
+    }
+
+    if (event.event_type == "COMBAT_LOG_VERSION") {
+        advanced_logging_ = event.advanced_logging;
+        return true;
+    }
+
+    return false;
+}
+
+void ShotCallEngine::begin_roster_snapshot(ch::time_point<ch::system_clock> started_at)
+{
+    run_roster_.clear();
+    roster_snapshot_known_      = false;
+    roster_snapshot_pending_    = true;
+    roster_snapshot_started_at_ = started_at;
+}
+
+void ShotCallEngine::reset_roster_snapshot()
+{
+    run_roster_.clear();
+    roster_snapshot_known_   = false;
+    roster_snapshot_pending_ = false;
+}
+
+void ShotCallEngine::finalize_roster_snapshot_if_due(
+    ch::time_point<ch::system_clock> now, bool event_followed)
+{
+    if (!roster_snapshot_pending_) {
+        return;
+    }
+    if (!event_followed && now - roster_snapshot_started_at_ < roster_snapshot_window) {
+        return;
+    }
+
+    roster_snapshot_pending_ = false;
+    roster_snapshot_known_   = !run_roster_.empty();
+}
+
+bool ShotCallEngine::in_active_run() const
+{
+    return run_state_ == RunState::ChallengeActive || encounter_active_;
+}
+
+bool ShotCallEngine::player_in_current_run(const std::string& guid, const Player& player) const
+{
+    if (roster_snapshot_known_) {
+        return run_roster_.count(guid) > 0;
+    }
+    return player.last_seen >= run_started_at_;
+}
+
+void ShotCallEngine::clear_enemies_and_calls()
+{
+    enemy_roster_.clear();
+    shot_call_queue_.clear();
 }
 
 void ShotCallEngine::handle_death(const CombatEvent& event)
@@ -101,11 +247,13 @@ void ShotCallEngine::handle_player_event(const CombatEvent& event)
         }
     }
 
+    Player& player   = player_iter->second;
+    player.last_seen = event.time_stamp;
+
     if (Constants::is_ignorable_event(event.event_type)) {
         return;
     }
 
-    Player& player = player_iter->second;
     if (Constants::is_battle_rez(event.spell_id) && event.event_type == "SPELL_CAST_SUCCESS") {
         if (auto it = roster_.find(event.target_id); it != roster_.end()) {
             it->second.is_alive = true;
@@ -121,6 +269,10 @@ void ShotCallEngine::handle_player_event(const CombatEvent& event)
 
 void ShotCallEngine::handle_enemy_event(const CombatEvent& event)
 {
+    if (!in_active_run() || !is_hostile_action(event.event_type)) {
+        return;
+    }
+
     if (auto it = enemy_roster_.find(event.source_id); it == enemy_roster_.end()) {
         identify_enemy(event);
     }
@@ -130,6 +282,13 @@ void ShotCallEngine::handle_combatant_info(const CombatEvent& event)
 {
     if (event.source_id.empty()) {
         return;
+    }
+
+    if (in_active_run()) {
+        run_roster_.insert(event.source_id);
+        if (roster_snapshot_pending_) {
+            roster_snapshot_started_at_ = event.time_stamp;
+        }
     }
 
     const std::string class_name { Constants::get_class_from_spec(event.spec_id) };
@@ -148,6 +307,7 @@ void ShotCallEngine::handle_combatant_info(const CombatEvent& event)
     player.class_name = class_name;
     player.spec_id    = event.spec_id;
     player.spec_name  = std::string { Constants::get_spec_name(event.spec_id) };
+    player.last_seen  = event.time_stamp;
 }
 
 void ShotCallEngine::learn_player_name(const std::string& guid, std::string_view name)
@@ -197,7 +357,8 @@ std::string ShotCallEngine::find_available_interrupter(
 {
     for (const auto& entry : roster_) {
         const Player& player = entry.second;
-        if (!player.is_alive || player.interrupt.id == 0) {
+        if (!player.is_alive || player.interrupt.id == 0
+            || !player_in_current_run(entry.first, player)) {
             continue;
         }
         if (player.interrupt.on_cooldown_until <= call_time) {
@@ -211,7 +372,7 @@ std::string ShotCallEngine::find_available_ccer(const ch::time_point<ch::system_
 {
     for (const auto& entry : roster_) {
         const Player& player = entry.second;
-        if (!player.is_alive) {
+        if (!player.is_alive || !player_in_current_run(entry.first, player)) {
             continue;
         }
 
@@ -230,10 +391,32 @@ void ShotCallEngine::set_shotcall_callback(
     shotcall_callback_ = callback;
 }
 
+PartyStatus ShotCallEngine::party_status() const
+{
+    std::lock_guard<std::mutex> lock { mtx_ };
+
+    PartyStatus status;
+    status.roster_known     = roster_snapshot_known_;
+    status.advanced_logging = advanced_logging_;
+    status.in_run           = in_active_run();
+    status.expected         = roster_snapshot_known_ ? static_cast<int>(run_roster_.size()) : 5;
+
+    int identified = 0;
+    for (const auto& entry : roster_) {
+        if (entry.second.class_name.empty() || !player_in_current_run(entry.first, entry.second)) {
+            continue;
+        }
+        ++identified;
+    }
+    status.identified = identified;
+    return status;
+}
+
 bool ShotCallEngine::dispatch_next_shotcall(ch::time_point<ch::system_clock> now)
 {
     std::unique_lock<std::mutex> lock { mtx_ };
-    if (shot_call_queue_.empty()) {
+    finalize_roster_snapshot_if_due(now, false);
+    if (shot_call_queue_.empty() || !party_size_ok_) {
         return false;
     }
 
@@ -308,6 +491,7 @@ void ShotCallEngine::identify_player(const CombatEvent& event)
         Constants::get_interrupt_cd(class_name) };
     Player new_player { event.source_id, event.name, class_name, interrupt,
         build_crowd_control_map(class_name) };
+    new_player.last_seen = event.time_stamp;
     roster_.emplace(event.source_id, std::move(new_player));
 }
 
