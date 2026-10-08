@@ -123,8 +123,8 @@ TEST(Engine, FirstEventInterrupt_IdentifiesWarriorAndAppliesCooldown)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     // Pummel is on cooldown until now+15s, so the 4s call has no interrupter.
@@ -153,8 +153,8 @@ TEST(Engine, FirstEventCrowdControl_IdentifiesWarrior)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::milliseconds { 8900 });
@@ -182,8 +182,8 @@ TEST(Engine, UnknownFirstSpell_IgnoredUntilIdentified)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 1 } + ch::seconds { 4 });
@@ -211,8 +211,8 @@ TEST(Engine, UnknownSpecCombatantInfo_DoesNotBlockIdentification)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 1 } + ch::seconds { 4 });
@@ -243,8 +243,8 @@ TEST(Engine, InterruptCast_PutsOnCooldown)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -309,8 +309,8 @@ TEST(Engine, PlayerDeath_MarkedDead)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -349,8 +349,8 @@ TEST(Engine, BattleRez_RevivesPlayer)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -400,8 +400,8 @@ TEST(Engine, IdentifyEnemy_TrackedNPC)
 
     // Should have generated shotcalls -- dispatch should work
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
     // First shotcall for 216293 (AoE Barrage) is at combat_start + 4000ms
     const std::size_t dispatched = engine.dispatch_due(now + ch::seconds { 4 });
@@ -457,8 +457,8 @@ TEST(Engine, IdentifyEnemy_MultipleSpells)
 
     // Should have shotcalls from both spells
     std::vector<std::string> callouts;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        callouts.push_back(callout);
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callouts.push_back(dispatched.text);
     });
 
     // Dispatch multiple times covering both first_cast times
@@ -482,7 +482,7 @@ TEST(Engine, GenerateShotcalls_CorrectCount)
     engine.handle_event(ev);
 
     int count = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         count++;
     });
 
@@ -509,7 +509,7 @@ TEST(Engine, GenerateShotcalls_SortedByTime)
     engine.handle_event(ev);
 
     std::vector<ch::system_clock::time_point> dispatch_times;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         dispatch_times.push_back(ch::system_clock::now());
     });
 
@@ -539,8 +539,8 @@ TEST(Engine, Dispatch_AvailableInterrupter)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -573,8 +573,8 @@ TEST(Engine, Dispatch_InterrupterOnCooldown_AssignsNext)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -602,8 +602,8 @@ TEST(Engine, Dispatch_AllOnCooldown_GoingOff)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -628,8 +628,8 @@ TEST(Engine, Dispatch_DeadPlayerSkipped)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -653,8 +653,8 @@ TEST(Engine, Dispatch_StunRow_AssignsCcer)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& callout) {
-        last_callout = callout;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        last_callout = dispatched.text;
     });
 
     // First cast at 8900ms
@@ -667,27 +667,39 @@ TEST(Engine, Mechanics_TextOnlyRowsIgnoreAvailableAssignees)
 {
     // A Warrior is available, but Dispel/TankHit/Movement/Awareness rows
     // announce text without an assignee.
-    const auto callout_for = [](std::string_view npc_id, int spell_id, ch::milliseconds first_cast) {
-        ShotCallEngine engine;
-        auto now = ch::system_clock::now();
-        engine.handle_event(make_challenge_start(now));
-        engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Warrior", PLAYER_FLAG,
-            "Player-1-BBB", 6673, "", now));
-        engine.handle_event(make_event("SPELL_CAST_START",
-            "Creature-0-0-0-0-" + std::string(npc_id) + "-ABC", "Mob", ENEMY_FLAG, "Player-1-AAA",
-            spell_id, std::string(npc_id), now));
+    const auto dispatched_for
+        = [](std::string_view npc_id, int spell_id, ch::milliseconds first_cast) {
+              ShotCallEngine engine;
+              auto now = ch::system_clock::now();
+              engine.handle_event(make_challenge_start(now));
+              engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Warrior",
+                  PLAYER_FLAG, "Player-1-BBB", 6673, "", now));
+              engine.handle_event(make_event("SPELL_CAST_START",
+                  "Creature-0-0-0-0-" + std::string(npc_id) + "-ABC", "Mob", ENEMY_FLAG,
+                  "Player-1-AAA", spell_id, std::string(npc_id), now));
 
-        std::string callout;
-        engine.set_shotcall_callback(
-            [&](const ScheduledShotCall&, const std::string& text) { callout = text; });
-        engine.dispatch_due(now + first_cast - ch::milliseconds { 2500 });
-        return callout;
-    };
+              DispatchedCall dispatched;
+              engine.set_shotcall_callback(
+                  [&](const DispatchedCall& call) { dispatched = call; });
+              engine.dispatch_due(now + first_cast - ch::milliseconds { 2500 });
+              return dispatched;
+          };
 
-    EXPECT_EQ(callout_for("234957", 1221483, ch::milliseconds { 15000 }), "Dispel Dispel soon");
-    EXPECT_EQ(callout_for("242631", 1235368, ch::milliseconds { 6900 }), "Tank Tank Frontal soon");
-    EXPECT_EQ(callout_for("236995", 1226111, ch::milliseconds { 15000 }), "Ejection soon");
-    EXPECT_EQ(callout_for("214761", 431364, ch::milliseconds { 3300 }), "Ray soon");
+    const DispatchedCall dispel = dispatched_for("234957", 1221483, ch::milliseconds { 15000 });
+    EXPECT_EQ(dispel.text, "Dispel Dispel soon");
+    EXPECT_FALSE(dispel.assignment.has_value());
+
+    const DispatchedCall tank_hit = dispatched_for("242631", 1235368, ch::milliseconds { 6900 });
+    EXPECT_EQ(tank_hit.text, "Tank Tank Frontal soon");
+    EXPECT_FALSE(tank_hit.assignment.has_value());
+
+    const DispatchedCall movement = dispatched_for("236995", 1226111, ch::milliseconds { 15000 });
+    EXPECT_EQ(movement.text, "Ejection soon");
+    EXPECT_FALSE(movement.assignment.has_value());
+
+    const DispatchedCall awareness = dispatched_for("214761", 431364, ch::milliseconds { 3300 });
+    EXPECT_EQ(awareness.text, "Ray soon");
+    EXPECT_FALSE(awareness.assignment.has_value());
 }
 
 // ==================== Run boundaries ====================
@@ -915,8 +927,8 @@ TEST(Engine, ClassKnowledgeSurvivesBetweenKeys)
         ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }), 1u);
@@ -943,8 +955,8 @@ TEST(Engine, PreviousRunPlayerNotInSnapshotIsNotAssigned)
         ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
 
     std::string callout;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }), 1u);
@@ -963,7 +975,7 @@ TEST(Engine, DispatchDue_RespectsLeadWindow)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -983,7 +995,7 @@ TEST(Engine, DispatchDue_LateWithinGraceAndRecurrenceAfterExpiry)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -1014,7 +1026,7 @@ TEST(Engine, DispatchDue_BacklogDispatchesDueCallInSamePass)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::milliseconds { 5000 }));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -1035,8 +1047,8 @@ TEST(Engine, DispatchDue_DispatchesInDueOrder)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     std::vector<std::string> enemy_order;
-    engine.set_shotcall_callback([&](const ScheduledShotCall& call, const std::string&) {
-        enemy_order.push_back(call.enemy_guid);
+    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
+        enemy_order.push_back(dispatched.call.enemy_guid);
     });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 4000 }), 2u);
@@ -1054,7 +1066,7 @@ TEST(Engine, DispatchDue_LazyRecurrenceOneCooldownLater)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -1078,7 +1090,7 @@ TEST(Engine, DispatchDue_EnemyDeathLazilyCancelsCalls)
     engine.handle_event(death);
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -1142,7 +1154,7 @@ TEST(Engine, ResyncLaterCastMovesNextCall)
 
     std::optional<ScheduledShotCall> last_call;
     engine.set_shotcall_callback(
-        [&](const ScheduledShotCall& call, const std::string&) { last_call = call; });
+        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
 
     // The stale prediction at now+8500ms is discarded when its turn comes.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 8500 }), 0u);
@@ -1169,7 +1181,7 @@ TEST(Engine, ResyncEarlierCastMovesNextCall)
 
     std::optional<ScheduledShotCall> last_call;
     engine.set_shotcall_callback(
-        [&](const ScheduledShotCall& call, const std::string&) { last_call = call; });
+        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 8500 }), 0u);
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 28700 }), 1u);
@@ -1195,7 +1207,7 @@ TEST(Engine, InterruptResyncsInterruptedSpell)
 
     std::optional<ScheduledShotCall> last_call;
     engine.set_shotcall_callback(
-        [&](const ScheduledShotCall& call, const std::string&) { last_call = call; });
+        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
 
     // The original prediction at now+4000ms is stale; the interrupted ability is rescheduled.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 4000 }), 0u);
@@ -1219,7 +1231,7 @@ TEST(Engine, UnknownSpellDoesNotDisturbSchedule)
 
     std::optional<ScheduledShotCall> last_call;
     engine.set_shotcall_callback(
-        [&](const ScheduledShotCall& call, const std::string&) { last_call = call; });
+        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
 
     // The original prediction is untouched and fires at its lead boundary.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
@@ -1241,7 +1253,7 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const ScheduledShotCall&, const std::string& text) { callout = text; });
+            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6000 }), 1u);
         EXPECT_EQ(callout, "Tank kick DoT soon");
@@ -1257,7 +1269,7 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const ScheduledShotCall&, const std::string& text) { callout = text; });
+            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6400 }), 1u);
         EXPECT_EQ(callout, "Tank stop AOE soon");
@@ -1271,11 +1283,194 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const ScheduledShotCall&, const std::string& text) { callout = text; });
+            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6000 }), 1u);
         EXPECT_NE(callout.find("this one is going off"), std::string::npos);
         EXPECT_NE(callout.find("DoT"), std::string::npos);
         EXPECT_NE(callout.find("soon"), std::string::npos);
     }
+}
+
+// ==================== Assignment quality ====================
+
+TEST(Engine, InterruptCooldownsTrackIndividualSpells)
+{
+    // Solar Beam's 60s cooldown must not put Skull Bash on cooldown.
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-DRU", "Druid", PLAYER_FLAG,
+        "Player-1-BBB", 1126, "", now)); // Mark of the Wild identifies Druid
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-DRU", "Druid", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 78675, "", now)); // Solar Beam
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    DispatchedCall dispatched;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_TRUE(dispatched.assignment.has_value());
+    EXPECT_EQ(dispatched.assignment->spell_id, 106839);
+    EXPECT_EQ(dispatched.assignment->spell_name, "Skull Bash");
+}
+
+TEST(Engine, SkullBashCooldownDoesNotBlockSolarBeam)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-DRU", "Druid", PLAYER_FLAG,
+        "Player-1-BBB", 1126, "", now)); // Mark of the Wild identifies Druid
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-DRU", "Druid", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 106839, "", now)); // Skull Bash
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    DispatchedCall dispatched;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_TRUE(dispatched.assignment.has_value());
+    EXPECT_EQ(dispatched.assignment->spell_id, 78675);
+    EXPECT_EQ(dispatched.assignment->spell_name, "Solar Beam");
+}
+
+TEST(Engine, ReservationPreventsImmediateReassignment)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now)); // Warrior
+
+    // Three enemies due at now+4000, now+5000, and now+8000ms.
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-A", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-B", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 1 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-C", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 4 }));
+
+    std::vector<DispatchedCall> calls;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { calls.push_back(call); });
+
+    // First call: Tank is assigned and reserved until now+7000ms.
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_EQ(calls.size(), 1u);
+    ASSERT_TRUE(calls[0].assignment.has_value());
+
+    // Second call at now+5000ms is inside the reservation: no assignee.
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 2500 }), 1u);
+    ASSERT_EQ(calls.size(), 2u);
+    EXPECT_FALSE(calls[1].assignment.has_value());
+
+    // Third call at now+8000ms is past the reservation: Tank is available again.
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 5500 }), 1u);
+    ASSERT_EQ(calls.size(), 3u);
+    ASSERT_TRUE(calls[2].assignment.has_value());
+}
+
+TEST(Engine, RealCastOverwritesReservation)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now)); // Warrior
+
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-A", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    std::vector<DispatchedCall> calls;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { calls.push_back(call); });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_EQ(calls.size(), 1u);
+    ASSERT_TRUE(calls[0].assignment.has_value());
+
+    // The real Pummel cast replaces the reservation with its 15s cooldown.
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6552, "", now + ch::seconds { 5 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-C", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 4 }));
+
+    // At now+8000ms only the reservation would be over; the real cast keeps
+    // Pummel on cooldown until now+20000ms.
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 5500 }), 1u);
+    ASSERT_EQ(calls.size(), 2u);
+    EXPECT_FALSE(calls[1].assignment.has_value());
+}
+
+TEST(Engine, LruChoosesEarliestReadyPlayer)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "AAA", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "BBB", PLAYER_FLAG,
+        "Player-1-AAA", 6673, "", now));
+
+    // BBB's Pummel comes back one second earlier than AAA's.
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "BBB", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6552, "", now + ch::seconds { 1 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "AAA", PLAYER_FLAG,
+        "Creature-0-0-0-0-999-0", 6552, "", now + ch::seconds { 2 }));
+
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 14 }));
+
+    DispatchedCall dispatched;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+
+    // The call is due at now+18000ms; both players are ready, but BBB has been
+    // ready longer, so it wins despite AAA sorting first by GUID.
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 15500 }), 1u);
+    ASSERT_TRUE(dispatched.assignment.has_value());
+    EXPECT_EQ(dispatched.assignment->player_guid, "Player-1-BBB");
+    EXPECT_EQ(dispatched.assignment->player_name, "BBB");
+}
+
+TEST(Engine, LruTieBreaksByGuidOrder)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "AAA", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "BBB", PLAYER_FLAG,
+        "Player-1-AAA", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    DispatchedCall dispatched;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_TRUE(dispatched.assignment.has_value());
+    EXPECT_EQ(dispatched.assignment->player_guid, "Player-1-AAA");
+}
+
+TEST(Engine, DeadPlayerIsSkippedForAssignment)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "AAA", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "BBB", PLAYER_FLAG,
+        "Player-1-AAA", 6673, "", now));
+    engine.handle_event(
+        make_event("UNIT_DIED", "", "", "", "Player-1-AAA", 0, "", now + ch::seconds { 1 }));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+
+    DispatchedCall dispatched;
+    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
+    ASSERT_TRUE(dispatched.assignment.has_value());
+    EXPECT_EQ(dispatched.assignment->player_guid, "Player-1-BBB");
 }

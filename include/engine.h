@@ -67,8 +67,23 @@ struct ScheduledShotCall {
     CallOrigin origin = CallOrigin::Prediction;
 };
 
+// The party member and ability chosen to answer a call.
+struct Assignment {
+    std::string player_guid;
+    std::string player_name;
+    int spell_id = 0;
+    std::string spell_name;
+};
+
+// One dispatched call with its formatted text and optional assignment.
+struct DispatchedCall {
+    ScheduledShotCall call;
+    std::optional<Assignment> assignment;
+    std::string text;
+};
+
 // Callback invoked for each dispatched call, outside the engine mutex.
-using ShotCallCallback = std::function<void(const ScheduledShotCall&, const std::string&)>;
+using ShotCallCallback = std::function<void(const DispatchedCall&)>;
 
 // A party member known by GUID. The name may stay empty until an event
 // carrying it is seen; the class comes from an action or COMBATANT_INFO.
@@ -78,18 +93,19 @@ struct Player {
     std::string class_name;
     int spec_id = 0;
     std::string spec_name;
-    AbilityState interrupt;
+    std::map<int, AbilityState> interrupts;
     std::map<int, AbilityState> crowd_control;
     bool is_alive = true;
     // Timestamp of the most recent event carrying this player's GUID.
     ch::time_point<ch::system_clock> last_seen { };
 
     Player(std::string player_guid, std::string player_name, std::string player_class,
-        AbilityState interrupt_ability, std::map<int, AbilityState> crowd_control_abilities)
+        std::map<int, AbilityState> interrupt_abilities,
+        std::map<int, AbilityState> crowd_control_abilities)
         : guid { std::move(player_guid) }
         , name { std::move(player_name) }
         , class_name { std::move(player_class) }
-        , interrupt { interrupt_ability }
+        , interrupts { std::move(interrupt_abilities) }
         , crowd_control { std::move(crowd_control_abilities) }
     {
     }
@@ -127,9 +143,11 @@ struct PartyStatus {
 
 class ShotCallEngine {
 public:
-    // call_lead is how early a call may fire; late_grace is how late it may fire.
+    // call_lead is how early a call may fire; late_grace is how late it may
+    // fire; reservation_window reserves an assigned ability after dispatch.
     explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 2500 },
-        ch::milliseconds late_grace                    = ch::milliseconds { 1000 });
+        ch::milliseconds late_grace                    = ch::milliseconds { 1000 },
+        ch::milliseconds reservation_window            = ch::milliseconds { 3000 });
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
     void set_shotcall_callback(ShotCallCallback callback);
@@ -162,7 +180,7 @@ private:
     // Drops tracked enemies and their queued calls.
     void clear_enemies_and_calls();
     // Processes due and expired calls, returning the callbacks to invoke.
-    std::vector<std::pair<ScheduledShotCall, std::string>> dispatch_due_locked(
+    std::vector<DispatchedCall> dispatch_due_locked(
         ch::time_point<ch::system_clock> now);
     // Resyncs the enemy's matching ability from a real cast; unknown spells are ignored.
     void resync_from_cast(Enemy& enemy, const CombatEvent& event);
@@ -185,15 +203,18 @@ private:
     void identify_enemy(const CombatEvent& event);
     // Fills a roster player's name if it is still empty.
     void learn_player_name(const std::string& guid, std::string_view name);
-    // Returns the name of a living player whose interrupt/CC is off cooldown
-    // at call_time, or nullopt if none available. The name may be empty.
-    std::optional<std::string> find_available_interrupter(
+    // Returns a living player and the earliest-ready ability for the call, or
+    // nullopt if none is available. The player's name may be empty.
+    std::optional<Assignment> find_available_interrupter(
         const ch::time_point<ch::system_clock>& call_time);
-    std::optional<std::string> find_available_ccer(
+    std::optional<Assignment> find_available_ccer(
         const ch::time_point<ch::system_clock>& call_time);
+    // Extends the assigned ability's cooldown to reserve it for the call.
+    void reserve_assignment(const Assignment& assignment, ch::time_point<ch::system_clock> due);
 
     const ch::milliseconds call_lead_;
     const ch::milliseconds late_grace_;
+    const ch::milliseconds reservation_window_;
     ShotCallCallback shotcall_callback_;
     mutable std::mutex mtx_; // Guards all mutable state below
     std::condition_variable_any wakeup_;

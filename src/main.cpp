@@ -31,9 +31,9 @@ int main(int argc, char* argv[])
 
     ShotCallEngine engine { };
     engine.set_shotcall_callback(
-        [file_writer, socket_sender](const ScheduledShotCall& call, const std::string& callout) {
-            file_writer(call, callout);
-            socket_sender(call.enemy_guid, callout);
+        [file_writer, socket_sender](const DispatchedCall& dispatched) {
+            file_writer(dispatched);
+            socket_sender(dispatched.call.enemy_guid, dispatched.text);
         });
 
     // Run process_shotcalls on a background thread

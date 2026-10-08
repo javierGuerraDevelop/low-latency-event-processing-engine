@@ -186,27 +186,28 @@ constexpr bool is_ignorable_event(std::string_view event)
     return false;
 }
 
-inline constexpr std::array<std::tuple<std::string_view, int, std::chrono::seconds>, 14>
+inline constexpr std::array<
+    std::tuple<std::string_view, std::string_view, int, std::chrono::seconds>, 14>
     interrupt_data = { {
-        { "Death Knight", 47528, std::chrono::seconds { 15 } }, // Mind Freeze
-        { "Demon Hunter", 183752, std::chrono::seconds { 15 } }, // Disrupt
-        { "Druid", 106839, std::chrono::seconds { 15 } }, // Skull Bash (Main kick)
-        { "Druid", 78675, std::chrono::seconds { 60 } }, // Druid (Moonkin)
-        { "Evoker", 351338, std::chrono::seconds { 20 } }, // Quell
-        { "Hunter", 187707, std::chrono::seconds { 15 } }, // Muzzle
-        { "Mage", 2139, std::chrono::seconds { 24 } }, // Counterspell
-        { "Monk", 116705, std::chrono::seconds { 15 } }, // Spear Hand Strike
-        { "Paladin", 96231, std::chrono::seconds { 15 } }, // Rebuke
-        { "Priest", 15487, std::chrono::seconds { 45 } }, // Silence
-        { "Rogue", 1766, std::chrono::seconds { 15 } }, // Kick
-        { "Shaman", 57994, std::chrono::seconds { 12 } }, // Wind Shear
-        { "Warlock", 19647, std::chrono::seconds { 24 } }, // Spell Lock (Pet)
-        { "Warrior", 6552, std::chrono::seconds { 15 } } // Pummel
+        { "Death Knight", "Mind Freeze", 47528, std::chrono::seconds { 15 } },
+        { "Demon Hunter", "Disrupt", 183752, std::chrono::seconds { 15 } },
+        { "Druid", "Skull Bash", 106839, std::chrono::seconds { 15 } },
+        { "Druid", "Solar Beam", 78675, std::chrono::seconds { 60 } },
+        { "Evoker", "Quell", 351338, std::chrono::seconds { 20 } },
+        { "Hunter", "Muzzle", 187707, std::chrono::seconds { 15 } },
+        { "Mage", "Counterspell", 2139, std::chrono::seconds { 24 } },
+        { "Monk", "Spear Hand Strike", 116705, std::chrono::seconds { 15 } },
+        { "Paladin", "Rebuke", 96231, std::chrono::seconds { 15 } },
+        { "Priest", "Silence", 15487, std::chrono::seconds { 45 } },
+        { "Rogue", "Kick", 1766, std::chrono::seconds { 15 } },
+        { "Shaman", "Wind Shear", 57994, std::chrono::seconds { 12 } },
+        { "Warlock", "Spell Lock", 19647, std::chrono::seconds { 24 } },
+        { "Warrior", "Pummel", 6552, std::chrono::seconds { 15 } },
     } };
 
 constexpr int get_interrupt_id(std::string_view player_class)
 {
-    for (const auto& [class_name, interrupt_id, interrupt_cd] : interrupt_data) {
+    for (const auto& [class_name, spell_name, interrupt_id, interrupt_cd] : interrupt_data) {
         if (player_class == class_name) {
             return interrupt_id;
         }
@@ -217,7 +218,7 @@ constexpr int get_interrupt_id(std::string_view player_class)
 
 constexpr std::chrono::seconds get_interrupt_cd(std::string_view player_class)
 {
-    for (const auto& [class_name, interrupt_id, interrupt_cd] : interrupt_data) {
+    for (const auto& [class_name, spell_name, interrupt_id, interrupt_cd] : interrupt_data) {
         if (player_class == class_name) {
             return interrupt_cd;
         }
@@ -229,9 +230,33 @@ constexpr std::chrono::seconds get_interrupt_cd(std::string_view player_class)
 // Returns the class that owns an interrupt spell, or empty for an unknown id.
 constexpr std::string_view get_class_from_interrupt_spell(int spell_id)
 {
-    for (const auto& [class_name, interrupt_id, interrupt_cd] : interrupt_data) {
+    for (const auto& [class_name, spell_name, interrupt_id, interrupt_cd] : interrupt_data) {
         if (interrupt_id == spell_id) {
             return class_name;
+        }
+    }
+
+    return "";
+}
+
+// Returns the interrupt's cooldown, independent of class or row order.
+constexpr std::chrono::seconds get_interrupt_cooldown(int spell_id)
+{
+    for (const auto& [class_name, spell_name, interrupt_id, interrupt_cd] : interrupt_data) {
+        if (interrupt_id == spell_id) {
+            return interrupt_cd;
+        }
+    }
+
+    return std::chrono::seconds(0);
+}
+
+// Returns the interrupt's name, independent of class or row order.
+constexpr std::string_view get_interrupt_name(int spell_id)
+{
+    for (const auto& [class_name, spell_name, interrupt_id, interrupt_cd] : interrupt_data) {
+        if (interrupt_id == spell_id) {
+            return spell_name;
         }
     }
 
@@ -278,6 +303,30 @@ constexpr std::string_view get_class_from_cc_spell(int spell_id)
     for (const auto& [class_name, spell_name, cc_spell_id, cc_cooldown] : crowd_control_data) {
         if (cc_spell_id == spell_id) {
             return class_name;
+        }
+    }
+
+    return "";
+}
+
+// Returns the crowd-control cooldown, independent of class or row order.
+constexpr std::chrono::seconds get_crowd_control_cooldown(int spell_id)
+{
+    for (const auto& [class_name, spell_name, cc_spell_id, cc_cooldown] : crowd_control_data) {
+        if (cc_spell_id == spell_id) {
+            return cc_cooldown;
+        }
+    }
+
+    return std::chrono::seconds(0);
+}
+
+// Returns the crowd-control name, independent of class or row order.
+constexpr std::string_view get_crowd_control_name(int spell_id)
+{
+    for (const auto& [class_name, spell_name, cc_spell_id, cc_cooldown] : crowd_control_data) {
+        if (cc_spell_id == spell_id) {
+            return spell_name;
         }
     }
 
@@ -391,7 +440,7 @@ constexpr bool is_tracked_enemy(std::string_view enemy_id)
 
 constexpr bool is_interrupt(int spell_id)
 {
-    for (const auto& [class_name, id, cd] : interrupt_data) {
+    for (const auto& [class_name, spell_name, id, cd] : interrupt_data) {
         if (id == spell_id) {
             return true;
         }

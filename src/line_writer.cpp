@@ -53,9 +53,13 @@ std::string open_output_file(std::ofstream& file)
 
 ShotCallCallback make_shotcall_writer(std::ofstream& file)
 {
-    return [&file](const ScheduledShotCall& call, const std::string& text) {
-        file << "[" << format_scheduled_time(call.due) << " UTC] [" << origin_name(call.origin)
-             << "] " << text << "\n";
+    return [&file](const DispatchedCall& dispatched) {
+        file << "[" << format_scheduled_time(dispatched.call.due) << " UTC] ["
+             << origin_name(dispatched.call.origin) << "] " << dispatched.text;
+        if (dispatched.assignment) {
+            file << " (" << dispatched.assignment->spell_name << ")";
+        }
+        file << "\n";
         file.flush();
     };
 }

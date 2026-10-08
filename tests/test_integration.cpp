@@ -66,8 +66,8 @@ TEST(Integration, EnemyCast_QueuesCall)
     engine.handle_event(*cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
@@ -91,7 +91,7 @@ TEST(Integration, EnemyDeath_PurgesQueuedCalls)
     engine.handle_event(*death);
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&callbacks](const ScheduledShotCall&, const std::string&) {
+    engine.set_shotcall_callback([&callbacks](const DispatchedCall&) {
         ++callbacks;
     });
 
@@ -123,8 +123,8 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
     engine.handle_event(*first_cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(first_cast->time_stamp + *first_cast_delay), 1u);
@@ -157,8 +157,8 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
     engine.handle_event(*cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
@@ -190,8 +190,8 @@ TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
     engine.handle_event(*damage);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
-        callout = text;
+    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
+        callout = dispatched.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(damage->time_stamp + *first_cast), 1u);

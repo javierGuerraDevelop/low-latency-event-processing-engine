@@ -313,3 +313,23 @@ TEST(Constants, ClassFromCcSpell_UnknownReturnsEmpty)
     EXPECT_EQ(Constants::get_class_from_cc_spell(999999), "");
     EXPECT_EQ(Constants::get_class_from_cc_spell(0), "");
 }
+
+// --- per-spell ability lookups ---
+
+TEST(Constants, InterruptLookups)
+{
+    EXPECT_EQ(Constants::get_interrupt_name(6552), "Pummel");
+    EXPECT_EQ(Constants::get_interrupt_cooldown(6552), std::chrono::seconds { 15 });
+    EXPECT_EQ(Constants::get_interrupt_name(78675), "Solar Beam");
+    EXPECT_EQ(Constants::get_interrupt_cooldown(78675), std::chrono::seconds { 60 });
+    EXPECT_EQ(Constants::get_interrupt_name(999999), "");
+    EXPECT_EQ(Constants::get_interrupt_cooldown(999999), std::chrono::seconds { 0 });
+}
+
+TEST(Constants, CrowdControlLookups)
+{
+    EXPECT_EQ(Constants::get_crowd_control_name(122), "Frost Nova");
+    EXPECT_EQ(Constants::get_crowd_control_cooldown(122), std::chrono::seconds { 30 });
+    EXPECT_EQ(Constants::get_crowd_control_name(999999), "");
+    EXPECT_EQ(Constants::get_crowd_control_cooldown(999999), std::chrono::seconds { 0 });
+}

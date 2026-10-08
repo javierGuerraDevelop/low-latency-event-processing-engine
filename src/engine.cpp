@@ -1,5 +1,6 @@
 #include "engine.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -69,6 +70,18 @@ EnemyAbilityRuntime* find_ability(
     return nullptr;
 }
 
+// Builds the class's interrupt abilities with zeroed cooldowns.
+std::map<int, AbilityState> build_interrupt_map(const std::string& class_name)
+{
+    std::map<int, AbilityState> abilities;
+    for (const auto& [interrupt_class, spell_name, spell_id, cooldown] : Constants::interrupt_data) {
+        if (interrupt_class == class_name) {
+            abilities[spell_id] = AbilityState { spell_id, cooldown };
+        }
+    }
+    return abilities;
+}
+
 // Builds the class's crowd-control abilities with zeroed cooldowns.
 std::map<int, AbilityState> build_crowd_control_map(const std::string& class_name)
 {
@@ -84,29 +97,30 @@ std::map<int, AbilityState> build_crowd_control_map(const std::string& class_nam
 // Resets a player's interrupt and crowd-control state from the class tables.
 void initialize_player_abilities(Player& player, const std::string& class_name)
 {
-    player.interrupt     = AbilityState { Constants::get_interrupt_id(class_name),
-        Constants::get_interrupt_cd(class_name) };
+    player.interrupts    = build_interrupt_map(class_name);
     player.crowd_control = build_crowd_control_map(class_name);
 }
 
 // Builds the spoken text for one dispatched call; all templates live here.
 std::string format_spoken_call(
-    const Constants::EnemySpellProfile& profile, const std::optional<std::string>& assignee)
+    const Constants::EnemySpellProfile& profile, const std::optional<Assignment>& assignment)
 {
     const std::string callout { profile.callout };
 
     if (profile.mechanic == Constants::Mechanic::Kick) {
-        if (!assignee) {
+        if (!assignment) {
             return "this one is going off — " + callout + " soon";
         }
-        const std::string prefix = assignee->empty() ? std::string { } : *assignee + " ";
+        const std::string prefix
+            = assignment->player_name.empty() ? std::string { } : assignment->player_name + " ";
         return prefix + "kick " + callout + " soon";
     }
     if (profile.mechanic == Constants::Mechanic::Stun) {
-        if (!assignee) {
+        if (!assignment) {
             return "this one is going off — " + callout + " soon";
         }
-        const std::string prefix = assignee->empty() ? std::string { } : *assignee + " ";
+        const std::string prefix
+            = assignment->player_name.empty() ? std::string { } : assignment->player_name + " ";
         return prefix + "stop " + callout + " soon";
     }
     if (profile.mechanic == Constants::Mechanic::Dispel) {
@@ -120,9 +134,11 @@ std::string format_spoken_call(
 
 } // namespace
 
-ShotCallEngine::ShotCallEngine(ch::milliseconds call_lead, ch::milliseconds late_grace)
+ShotCallEngine::ShotCallEngine(ch::milliseconds call_lead, ch::milliseconds late_grace,
+    ch::milliseconds reservation_window)
     : call_lead_ { call_lead }
     , late_grace_ { late_grace }
+    , reservation_window_ { reservation_window }
 {
 }
 
@@ -307,12 +323,12 @@ void ShotCallEngine::handle_player_event(const CombatEvent& event)
         if (auto it = roster_.find(event.target_id); it != roster_.end()) {
             it->second.is_alive = true;
         }
-    } else if (Constants::is_interrupt(event.spell_id)) {
-        player.interrupt.on_cooldown_until = event.time_stamp + player.interrupt.cooldown;
-    } else if (Constants::is_crowd_control(event.spell_id)) {
-        if (auto it = player.crowd_control.find(event.spell_id); it != player.crowd_control.end()) {
-            it->second.on_cooldown_until = event.time_stamp + it->second.cooldown;
-        }
+    } else if (auto interrupt_it = player.interrupts.find(event.spell_id);
+        interrupt_it != player.interrupts.end()) {
+        interrupt_it->second.on_cooldown_until = event.time_stamp + interrupt_it->second.cooldown;
+    } else if (auto cc_it = player.crowd_control.find(event.spell_id);
+        cc_it != player.crowd_control.end()) {
+        cc_it->second.on_cooldown_until = event.time_stamp + cc_it->second.cooldown;
     }
 }
 
@@ -442,25 +458,36 @@ std::optional<ch::time_point<ch::system_clock>> ShotCallEngine::next_actionable_
     return shot_call_queue_.begin()->first - call_lead_;
 }
 
-std::optional<std::string> ShotCallEngine::find_available_interrupter(
+std::optional<Assignment> ShotCallEngine::find_available_interrupter(
     const ch::time_point<ch::system_clock>& call_time)
 {
+    std::optional<Assignment> best;
+    ch::time_point<ch::system_clock> best_ready { };
     for (const auto& entry : roster_) {
         const Player& player = entry.second;
-        if (!player.is_alive || player.interrupt.id == 0
-            || !player_in_current_run(entry.first, player)) {
+        if (!player.is_alive || !player_in_current_run(entry.first, player)) {
             continue;
         }
-        if (player.interrupt.on_cooldown_until <= call_time) {
-            return player.name;
+
+        for (const auto& ability : player.interrupts) {
+            if (ability.second.on_cooldown_until > call_time) {
+                continue;
+            }
+            if (!best || ability.second.on_cooldown_until < best_ready) {
+                best       = Assignment { entry.first, player.name, ability.first,
+                    std::string { Constants::get_interrupt_name(ability.first) } };
+                best_ready = ability.second.on_cooldown_until;
+            }
         }
     }
-    return std::nullopt;
+    return best;
 }
 
-std::optional<std::string> ShotCallEngine::find_available_ccer(
+std::optional<Assignment> ShotCallEngine::find_available_ccer(
     const ch::time_point<ch::system_clock>& call_time)
 {
+    std::optional<Assignment> best;
+    ch::time_point<ch::system_clock> best_ready { };
     for (const auto& entry : roster_) {
         const Player& player = entry.second;
         if (!player.is_alive || !player_in_current_run(entry.first, player)) {
@@ -468,12 +495,42 @@ std::optional<std::string> ShotCallEngine::find_available_ccer(
         }
 
         for (const auto& ability : player.crowd_control) {
-            if (ability.second.on_cooldown_until <= call_time) {
-                return player.name;
+            if (ability.second.on_cooldown_until > call_time) {
+                continue;
+            }
+            if (!best || ability.second.on_cooldown_until < best_ready) {
+                best       = Assignment { entry.first, player.name, ability.first,
+                    std::string { Constants::get_crowd_control_name(ability.first) } };
+                best_ready = ability.second.on_cooldown_until;
             }
         }
     }
-    return std::nullopt;
+    return best;
+}
+
+void ShotCallEngine::reserve_assignment(
+    const Assignment& assignment, ch::time_point<ch::system_clock> due)
+{
+    auto player_iter = roster_.find(assignment.player_guid);
+    if (player_iter == roster_.end()) {
+        return;
+    }
+
+    Player& player        = player_iter->second;
+    const auto reserve_in = [&](std::map<int, AbilityState>& abilities) {
+        const auto ability_iter = abilities.find(assignment.spell_id);
+        if (ability_iter == abilities.end()) {
+            return false;
+        }
+        const auto reservation = std::min(
+            reservation_window_, ch::duration_cast<ch::milliseconds>(ability_iter->second.cooldown));
+        ability_iter->second.on_cooldown_until
+            = std::max(ability_iter->second.on_cooldown_until, due + reservation);
+        return true;
+    };
+    if (!reserve_in(player.interrupts)) {
+        reserve_in(player.crowd_control);
+    }
 }
 
 void ShotCallEngine::set_shotcall_callback(ShotCallCallback callback)
@@ -502,7 +559,7 @@ PartyStatus ShotCallEngine::party_status() const
     return status;
 }
 
-std::vector<std::pair<ScheduledShotCall, std::string>> ShotCallEngine::dispatch_due_locked(
+std::vector<DispatchedCall> ShotCallEngine::dispatch_due_locked(
     ch::time_point<ch::system_clock> now)
 {
     finalize_roster_snapshot_if_due(now, false);
@@ -510,7 +567,7 @@ std::vector<std::pair<ScheduledShotCall, std::string>> ShotCallEngine::dispatch_
         return { };
     }
 
-    std::vector<std::pair<ScheduledShotCall, std::string>> calls;
+    std::vector<DispatchedCall> calls;
     auto call_iter = shot_call_queue_.begin();
     while (call_iter != shot_call_queue_.end()) {
         const ScheduledShotCall call = call_iter->second;
@@ -536,35 +593,39 @@ std::vector<std::pair<ScheduledShotCall, std::string>> ShotCallEngine::dispatch_
             break;
         }
 
-        std::optional<std::string> assignee;
+        std::optional<Assignment> assignment;
         switch (call.profile->mechanic) {
         case Constants::Mechanic::Kick:
-            assignee = find_available_interrupter(call.due);
+            assignment = find_available_interrupter(call.due);
             break;
         case Constants::Mechanic::Stun:
-            assignee = find_available_ccer(call.due);
+            assignment = find_available_ccer(call.due);
             break;
         default:
             break;
         }
+        if (assignment) {
+            reserve_assignment(*assignment, call.due);
+        }
         advance_recurrence(enemy_iter->second, *ability);
         call_iter = shot_call_queue_.erase(call_iter);
-        calls.emplace_back(call, format_spoken_call(*call.profile, assignee));
+        calls.push_back(
+            DispatchedCall { call, assignment, format_spoken_call(*call.profile, assignment) });
     }
     return calls;
 }
 
 std::size_t ShotCallEngine::dispatch_due(ch::time_point<ch::system_clock> now)
 {
-    std::vector<std::pair<ScheduledShotCall, std::string>> calls;
+    std::vector<DispatchedCall> calls;
     {
         std::lock_guard<std::mutex> lock { mtx_ };
         calls = dispatch_due_locked(now);
     }
 
-    for (const auto& [call, text] : calls) {
+    for (const auto& dispatched : calls) {
         if (shotcall_callback_) {
-            shotcall_callback_(call, text);
+            shotcall_callback_(dispatched);
         }
     }
     return calls.size();
@@ -573,7 +634,7 @@ std::size_t ShotCallEngine::dispatch_due(ch::time_point<ch::system_clock> now)
 void ShotCallEngine::process_shotcalls(std::stop_token stop_token)
 {
     while (!stop_token.stop_requested()) {
-        std::vector<std::pair<ScheduledShotCall, std::string>> calls;
+        std::vector<DispatchedCall> calls;
         {
             std::unique_lock<std::mutex> lock { mtx_ };
             calls = dispatch_due_locked(ch::system_clock::now());
@@ -589,9 +650,9 @@ void ShotCallEngine::process_shotcalls(std::stop_token stop_token)
             }
         }
 
-        for (const auto& [call, text] : calls) {
+        for (const auto& dispatched : calls) {
             if (shotcall_callback_) {
-                shotcall_callback_(call, text);
+                shotcall_callback_(dispatched);
             }
         }
     }
@@ -610,9 +671,7 @@ void ShotCallEngine::identify_player(const CombatEvent& event)
         return;
     }
 
-    AbilityState interrupt { Constants::get_interrupt_id(class_name),
-        Constants::get_interrupt_cd(class_name) };
-    Player new_player { event.source_id, event.name, class_name, interrupt,
+    Player new_player { event.source_id, event.name, class_name, build_interrupt_map(class_name),
         build_crowd_control_map(class_name) };
     new_player.last_seen = event.time_stamp;
     roster_.emplace(event.source_id, std::move(new_player));
