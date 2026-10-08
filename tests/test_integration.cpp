@@ -66,7 +66,7 @@ TEST(Integration, EnemyCast_QueuesCall)
     engine.handle_event(*cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
         callout = text;
     });
 
@@ -91,7 +91,7 @@ TEST(Integration, EnemyDeath_PurgesQueuedCalls)
     engine.handle_event(*death);
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&callbacks](const std::string&, const std::string&) {
+    engine.set_shotcall_callback([&callbacks](const ScheduledShotCall&, const std::string&) {
         ++callbacks;
     });
 
@@ -123,7 +123,7 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
     engine.handle_event(*first_cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
         callout = text;
     });
 
@@ -157,7 +157,7 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
     engine.handle_event(*cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
         callout = text;
     });
 
@@ -190,7 +190,7 @@ TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
     engine.handle_event(*damage);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const std::string&, const std::string& text) {
+    engine.set_shotcall_callback([&callout](const ScheduledShotCall&, const std::string& text) {
         callout = text;
     });
 

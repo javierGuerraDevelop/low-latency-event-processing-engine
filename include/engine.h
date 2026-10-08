@@ -65,6 +65,10 @@ struct EnemyAbility {
     }
 };
 
+// How a scheduled call was derived from the enemy's timeline.
+enum class CallOrigin { Prediction,
+    Resync };
+
 // One predicted cast waiting for its announcement window.
 struct ScheduledShotCall {
     std::string enemy_guid;
@@ -72,7 +76,11 @@ struct ScheduledShotCall {
     std::string callout;
     ch::time_point<ch::system_clock> due;
     std::uint64_t generation;
+    CallOrigin origin = CallOrigin::Prediction;
 };
+
+// Callback invoked for each dispatched call, outside the engine mutex.
+using ShotCallCallback = std::function<void(const ScheduledShotCall&, const std::string&)>;
 
 // A party member known by GUID. The name may stay empty until an event
 // carrying it is seen; the class comes from an action or COMBATANT_INFO.
@@ -134,12 +142,11 @@ struct PartyStatus {
 class ShotCallEngine {
 public:
     // call_lead is how early a call may fire; late_grace is how late it may fire.
-    explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 1000 },
+    explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 2500 },
         ch::milliseconds late_grace                    = ch::milliseconds { 1000 });
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
-    void set_shotcall_callback(
-        std::function<void(const std::string&, const std::string&)> callback);
+    void set_shotcall_callback(ShotCallCallback callback);
     // Dispatches every call whose window contains now and returns the number
     // of callbacks invoked. Expired calls are dropped, not announced.
     std::size_t dispatch_due(ch::time_point<ch::system_clock> now);
@@ -169,10 +176,18 @@ private:
     // Drops tracked enemies and their queued calls.
     void clear_enemies_and_calls();
     // Processes due and expired calls, returning the callbacks to invoke.
-    std::vector<std::pair<std::string, std::string>> dispatch_due_locked(
+    std::vector<std::pair<ScheduledShotCall, std::string>> dispatch_due_locked(
         ch::time_point<ch::system_clock> now);
+    // Resyncs the enemy's matching ability from a real cast; unknown spells are ignored.
+    void resync_from_cast(Enemy& enemy, const CombatEvent& event);
+    // Resyncs the interrupted ability of the event's target enemy.
+    void resync_interrupted_enemy(const CombatEvent& event);
+    // Reschedules one ability at cast_time + cooldown and queues the call.
+    void reschedule_ability(
+        Enemy& enemy, EnemyAbility& ability, ch::time_point<ch::system_clock> cast_time);
     // Queues the ability's next occurrence and wakes the scheduler thread.
-    void enqueue_shotcall_locked(const std::string& enemy_guid, const EnemyAbility& ability);
+    void enqueue_shotcall_locked(
+        const std::string& enemy_guid, const EnemyAbility& ability, CallOrigin origin);
     // Moves an ability one cooldown forward and queues the next occurrence.
     void advance_recurrence(Enemy& enemy, EnemyAbility& ability);
     // Wakes the scheduler after a schedule or enemy change.
@@ -185,13 +200,15 @@ private:
     // Fills a roster player's name if it is still empty.
     void learn_player_name(const std::string& guid, std::string_view name);
     // Returns the name of a living player whose interrupt/CC is off cooldown
-    // at call_time, or a fallback message if none available.
-    std::string find_available_interrupter(const ch::time_point<ch::system_clock>& call_time);
-    std::string find_available_ccer(const ch::time_point<ch::system_clock>& call_time);
+    // at call_time, or nullopt if none available. The name may be empty.
+    std::optional<std::string> find_available_interrupter(
+        const ch::time_point<ch::system_clock>& call_time);
+    std::optional<std::string> find_available_ccer(
+        const ch::time_point<ch::system_clock>& call_time);
 
     const ch::milliseconds call_lead_;
     const ch::milliseconds late_grace_;
-    std::function<void(const std::string&, const std::string&)> shotcall_callback_;
+    ShotCallCallback shotcall_callback_;
     mutable std::mutex mtx_; // Guards all mutable state below
     std::condition_variable_any wakeup_;
     std::uint64_t queue_revision_ = 0;
