@@ -58,10 +58,11 @@ bool is_hostile_action(std::string_view event_type)
 }
 
 // Finds the scheduled ability matching a call; stale generations do not match.
-EnemyAbility* find_ability(Enemy& enemy, int spell_id, std::uint64_t generation)
+EnemyAbilityRuntime* find_ability(
+    Enemy& enemy, const Constants::EnemySpellProfile* profile, std::uint64_t generation)
 {
     for (auto& ability : enemy.spells) {
-        if (ability.id == spell_id && ability.generation == generation) {
+        if (ability.profile == profile && ability.generation == generation) {
             return &ability;
         }
     }
@@ -90,17 +91,31 @@ void initialize_player_abilities(Player& player, const std::string& class_name)
 
 // Builds the spoken text for one dispatched call; all templates live here.
 std::string format_spoken_call(
-    const std::string& callout, const std::optional<std::string>& assignee, bool interruptable)
+    const Constants::EnemySpellProfile& profile, const std::optional<std::string>& assignee)
 {
-    if (!assignee) {
-        return "this one is going off — " + callout + " soon";
-    }
+    const std::string callout { profile.callout };
 
-    const std::string verb = interruptable ? "kick" : "stop";
-    if (assignee->empty()) {
-        return verb + " " + callout + " soon";
+    if (profile.mechanic == Constants::Mechanic::Kick) {
+        if (!assignee) {
+            return "this one is going off — " + callout + " soon";
+        }
+        const std::string prefix = assignee->empty() ? std::string { } : *assignee + " ";
+        return prefix + "kick " + callout + " soon";
     }
-    return *assignee + " " + verb + " " + callout + " soon";
+    if (profile.mechanic == Constants::Mechanic::Stun) {
+        if (!assignee) {
+            return "this one is going off — " + callout + " soon";
+        }
+        const std::string prefix = assignee->empty() ? std::string { } : *assignee + " ";
+        return prefix + "stop " + callout + " soon";
+    }
+    if (profile.mechanic == Constants::Mechanic::Dispel) {
+        return "Dispel " + callout + " soon";
+    }
+    if (profile.mechanic == Constants::Mechanic::TankHit) {
+        return "Tank " + callout + " soon";
+    }
+    return callout + " soon"; // Movement and Awareness only announce the cast.
 }
 
 } // namespace
@@ -361,17 +376,17 @@ void ShotCallEngine::learn_player_name(const std::string& guid, std::string_view
 }
 
 void ShotCallEngine::enqueue_shotcall_locked(
-    const std::string& enemy_guid, const EnemyAbility& ability, CallOrigin origin)
+    const std::string& enemy_guid, const EnemyAbilityRuntime& ability, CallOrigin origin)
 {
     shot_call_queue_.emplace(ability.next_due,
-        ScheduledShotCall { enemy_guid, ability.id, ability.callout, ability.next_due,
-            ability.generation, origin });
+        ScheduledShotCall { enemy_guid, ability.profile, ability.next_due, ability.generation,
+            origin });
     wake_scheduler_locked();
 }
 
-void ShotCallEngine::advance_recurrence(Enemy& enemy, EnemyAbility& ability)
+void ShotCallEngine::advance_recurrence(Enemy& enemy, EnemyAbilityRuntime& ability)
 {
-    ability.next_due += ability.cooldown;
+    ability.next_due += ability.profile->cooldown;
     ++ability.generation;
     enqueue_shotcall_locked(enemy.guid, ability, CallOrigin::Prediction);
 }
@@ -383,7 +398,7 @@ void ShotCallEngine::resync_from_cast(Enemy& enemy, const CombatEvent& event)
     }
 
     for (auto& ability : enemy.spells) {
-        if (ability.id == event.spell_id) {
+        if (ability.profile->spell_id == event.spell_id) {
             reschedule_ability(enemy, ability, event.time_stamp);
             return;
         }
@@ -398,7 +413,7 @@ void ShotCallEngine::resync_interrupted_enemy(const CombatEvent& event)
     }
 
     for (auto& ability : enemy_iter->second.spells) {
-        if (ability.id == event.interrupted_spell_id) {
+        if (ability.profile->spell_id == event.interrupted_spell_id) {
             reschedule_ability(enemy_iter->second, ability, event.time_stamp);
             return;
         }
@@ -406,9 +421,9 @@ void ShotCallEngine::resync_interrupted_enemy(const CombatEvent& event)
 }
 
 void ShotCallEngine::reschedule_ability(
-    Enemy& enemy, EnemyAbility& ability, ch::time_point<ch::system_clock> cast_time)
+    Enemy& enemy, EnemyAbilityRuntime& ability, ch::time_point<ch::system_clock> cast_time)
 {
-    ability.next_due = cast_time + ability.cooldown;
+    ability.next_due = cast_time + ability.profile->cooldown;
     ++ability.generation;
     enqueue_shotcall_locked(enemy.guid, ability, CallOrigin::Resync);
 }
@@ -505,7 +520,8 @@ std::vector<std::pair<ScheduledShotCall, std::string>> ShotCallEngine::dispatch_
             continue;
         }
 
-        EnemyAbility* ability = find_ability(enemy_iter->second, call.spell_id, call.generation);
+        EnemyAbilityRuntime* ability
+            = find_ability(enemy_iter->second, call.profile, call.generation);
         if (ability == nullptr) {
             call_iter = shot_call_queue_.erase(call_iter);
             continue;
@@ -520,22 +536,20 @@ std::vector<std::pair<ScheduledShotCall, std::string>> ShotCallEngine::dispatch_
             break;
         }
 
-        const bool interruptable = ability->is_interruptable;
-        bool announce            = true;
         std::optional<std::string> assignee;
-        if (interruptable) {
+        switch (call.profile->mechanic) {
+        case Constants::Mechanic::Kick:
             assignee = find_available_interrupter(call.due);
-        } else if (enemy_iter->second.is_ccable) {
+            break;
+        case Constants::Mechanic::Stun:
             assignee = find_available_ccer(call.due);
-        } else {
-            announce = false;
+            break;
+        default:
+            break;
         }
         advance_recurrence(enemy_iter->second, *ability);
         call_iter = shot_call_queue_.erase(call_iter);
-
-        if (announce) {
-            calls.emplace_back(call, format_spoken_call(call.callout, assignee, interruptable));
-        }
+        calls.emplace_back(call, format_spoken_call(*call.profile, assignee));
     }
     return calls;
 }
@@ -610,23 +624,19 @@ void ShotCallEngine::identify_enemy(const CombatEvent& event)
         return;
     }
 
-    std::vector<EnemyAbility> spells;
-    for (const auto& entry : Constants::enemy_data) {
-        if (entry.enemy_id == event.npc_id) {
-            spells.emplace_back(entry.spell_id, ch::milliseconds { entry.first_cast_ms },
-                ch::milliseconds { entry.cooldown_ms }, std::string { entry.callout },
-                entry.is_interruptable);
+    std::vector<EnemyAbilityRuntime> spells;
+    for (const auto& profile : Constants::enemy_data) {
+        if (profile.enemy_id == event.npc_id) {
+            spells.push_back(EnemyAbilityRuntime {
+                &profile, event.time_stamp + profile.first_cast, 1 });
         }
     }
 
     auto [enemy_iter, inserted] = enemy_roster_.emplace(event.source_id,
-        Enemy { event.source_id, std::move(spells), event.time_stamp,
-            Constants::is_enemy_ccable(event.npc_id) });
+        Enemy { event.source_id, std::move(spells), event.time_stamp });
     if (inserted) {
         Enemy& enemy = enemy_iter->second;
         for (auto& ability : enemy.spells) {
-            ability.next_due   = enemy.first_seen_time + ability.first_cast;
-            ability.generation = 1;
             enqueue_shotcall_locked(enemy.guid, ability, CallOrigin::Prediction);
         }
     }

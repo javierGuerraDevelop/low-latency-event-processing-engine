@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <future>
+#include <string_view>
 #include <thread>
 
 #include "constants.h"
@@ -146,7 +147,7 @@ TEST(Engine, FirstEventCrowdControl_IdentifiesWarrior)
         "Creature-0-0-0-0-999-0", 46968, "", now);
     engine.handle_event(shockwave);
 
-    // NPC 164557 casts a non-interruptable ability that requires a CCer.
+    // NPC 164557's AoE uses the Stun mechanic, so it needs a CCer.
     auto enemy = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-164557-ABC", "Mob", ENEMY_FLAG,
         "Player-1-CCC", 326409, "164557", now);
     engine.handle_event(enemy);
@@ -635,7 +636,7 @@ TEST(Engine, Dispatch_DeadPlayerSkipped)
     EXPECT_NE(last_callout.find("this one is going off"), std::string::npos);
 }
 
-TEST(Engine, Dispatch_NonInterruptable_AssignsCCer)
+TEST(Engine, Dispatch_StunRow_AssignsCcer)
 {
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
@@ -646,7 +647,7 @@ TEST(Engine, Dispatch_NonInterruptable_AssignsCCer)
         "Player-1-BBB", 6673, "", now);
     engine.handle_event(id_ev);
 
-    // NPC 164557 has non-interruptable AOE (is_ccable=true)
+    // NPC 164557's AoE is a Stun mechanic (is_ccable=true previously).
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-164557-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 326409, "164557", now);
     engine.handle_event(enemy_ev);
@@ -660,6 +661,33 @@ TEST(Engine, Dispatch_NonInterruptable_AssignsCCer)
     engine.dispatch_due(now + ch::milliseconds { 8900 });
     // Warrior has CC available, should be assigned
     EXPECT_NE(last_callout.find("Tank"), std::string::npos);
+}
+
+TEST(Engine, Mechanics_TextOnlyRowsIgnoreAvailableAssignees)
+{
+    // A Warrior is available, but Dispel/TankHit/Movement/Awareness rows
+    // announce text without an assignee.
+    const auto callout_for = [](std::string_view npc_id, int spell_id, ch::milliseconds first_cast) {
+        ShotCallEngine engine;
+        auto now = ch::system_clock::now();
+        engine.handle_event(make_challenge_start(now));
+        engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Warrior", PLAYER_FLAG,
+            "Player-1-BBB", 6673, "", now));
+        engine.handle_event(make_event("SPELL_CAST_START",
+            "Creature-0-0-0-0-" + std::string(npc_id) + "-ABC", "Mob", ENEMY_FLAG, "Player-1-AAA",
+            spell_id, std::string(npc_id), now));
+
+        std::string callout;
+        engine.set_shotcall_callback(
+            [&](const ScheduledShotCall&, const std::string& text) { callout = text; });
+        engine.dispatch_due(now + first_cast - ch::milliseconds { 2500 });
+        return callout;
+    };
+
+    EXPECT_EQ(callout_for("234957", 1221483, ch::milliseconds { 15000 }), "Dispel Dispel soon");
+    EXPECT_EQ(callout_for("242631", 1235368, ch::milliseconds { 6900 }), "Tank Tank Frontal soon");
+    EXPECT_EQ(callout_for("236995", 1226111, ch::milliseconds { 15000 }), "Ejection soon");
+    EXPECT_EQ(callout_for("214761", 431364, ch::milliseconds { 3300 }), "Ray soon");
 }
 
 // ==================== Run boundaries ====================
