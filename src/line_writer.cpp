@@ -51,15 +51,20 @@ std::string open_output_file(std::ofstream& file)
     return path;
 }
 
-ShotCallCallback make_shotcall_writer(std::ofstream& file)
+std::function<void(const EngineMessage&)> make_shotcall_writer(std::ofstream& file)
 {
-    return [&file](const DispatchedCall& dispatched) {
-        file << "[" << format_scheduled_time(dispatched.call.due) << " UTC] ["
-             << origin_name(dispatched.call.origin) << "] " << dispatched.text;
-        if (dispatched.assignment) {
-            file << " (" << dispatched.assignment->spell_name << ")";
+    return [&file](const EngineMessage& message) {
+        if (message.type == MessageType::PartyStatus) {
+            file << "STATUS " << message.text << "\n";
+        } else {
+            file << "[" << format_scheduled_time(message.due) << " UTC] ["
+                 << origin_name(message.origin) << "] [" << message.mechanic << "] "
+                 << message.text;
+            if (message.assignment) {
+                file << " (" << message.assignment->spell_name << ")";
+            }
+            file << "\n";
         }
-        file << "\n";
         file.flush();
     };
 }
