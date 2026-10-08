@@ -75,6 +75,26 @@ struct Assignment {
     std::string spell_name;
 };
 
+// Message kinds emitted by the engine.
+enum class MessageType : std::uint8_t { ShotCall,
+    PartyStatus };
+
+// One message for the outside world: a shotcall or a party status update.
+struct EngineMessage {
+    MessageType type = MessageType::ShotCall;
+    std::string text;
+    std::string enemy_guid;
+    std::string mechanic;
+    int spell_id = 0;
+    ch::system_clock::time_point due;
+    std::uint64_t call_id = 0;
+    CallOrigin origin     = CallOrigin::Prediction;
+    std::optional<Assignment> assignment;
+};
+
+// Callback invoked for each message, outside the engine mutex.
+using MessageCallback = std::function<void(const EngineMessage&)>;
+
 // One dispatched call with its formatted text and optional assignment.
 struct DispatchedCall {
     ScheduledShotCall call;
