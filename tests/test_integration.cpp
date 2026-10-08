@@ -65,12 +65,17 @@ TEST(Integration, EnemyCast_QueuesCall)
     engine.handle_event(*challenge);
     engine.handle_event(*cast);
 
+    int shotcalls = 0;
     std::string callout;
-    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++shotcalls;
+            callout = message.text;
+        }
     });
 
-    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
+    engine.dispatch_due(cast->time_stamp + *first_cast);
+    EXPECT_EQ(shotcalls, 1);
     EXPECT_FALSE(callout.empty());
 }
 
@@ -90,13 +95,15 @@ TEST(Integration, EnemyDeath_PurgesQueuedCalls)
     engine.handle_event(*cast);
     engine.handle_event(*death);
 
-    int callbacks = 0;
-    engine.set_shotcall_callback([&callbacks](const DispatchedCall&) {
-        ++callbacks;
+    int shotcalls = 0;
+    engine.set_shotcall_callback([&shotcalls](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++shotcalls;
+        }
     });
 
-    EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 0u);
-    EXPECT_EQ(callbacks, 0);
+    engine.dispatch_due(cast->time_stamp + *first_cast);
+    EXPECT_EQ(shotcalls, 0);
 }
 
 TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
@@ -123,8 +130,8 @@ TEST(Integration, PlayerDeath_MakesPlayerUnselectable)
     engine.handle_event(*first_cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&callout](const EngineMessage& message) {
+        callout = message.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(first_cast->time_stamp + *first_cast_delay), 1u);
@@ -157,8 +164,8 @@ TEST(Integration, CombatantInfoMakesPlayerAssignableWithoutAction)
     engine.handle_event(*cast);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&callout](const EngineMessage& message) {
+        callout = message.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(cast->time_stamp + *first_cast), 1u);
@@ -190,8 +197,8 @@ TEST(Integration, NameLearnedFromEnemyEventTargetingPlayer)
     engine.handle_event(*damage);
 
     std::string callout;
-    engine.set_shotcall_callback([&callout](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&callout](const EngineMessage& message) {
+        callout = message.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(damage->time_stamp + *first_cast), 1u);

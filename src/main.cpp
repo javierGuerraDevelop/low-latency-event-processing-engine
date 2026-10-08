@@ -30,11 +30,10 @@ int main(int argc, char* argv[])
     auto socket_sender = make_socket_sender();
 
     ShotCallEngine engine { };
-    engine.set_shotcall_callback(
-        [file_writer, socket_sender](const DispatchedCall& dispatched) {
-            file_writer(dispatched);
-            socket_sender(dispatched.call.enemy_guid, dispatched.text);
-        });
+    engine.set_shotcall_callback([file_writer, socket_sender](const EngineMessage& message) {
+        file_writer(message);
+        socket_sender(message);
+    });
 
     // Run process_shotcalls on a background thread
     std::jthread shotcall_thread { [&engine](std::stop_token stop_token) {

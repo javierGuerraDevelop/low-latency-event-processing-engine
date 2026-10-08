@@ -95,16 +95,6 @@ struct EngineMessage {
 // Callback invoked for each message, outside the engine mutex.
 using MessageCallback = std::function<void(const EngineMessage&)>;
 
-// One dispatched call with its formatted text and optional assignment.
-struct DispatchedCall {
-    ScheduledShotCall call;
-    std::optional<Assignment> assignment;
-    std::string text;
-};
-
-// Callback invoked for each dispatched call, outside the engine mutex.
-using ShotCallCallback = std::function<void(const DispatchedCall&)>;
-
 // A party member known by GUID. The name may stay empty until an event
 // carrying it is seen; the class comes from an action or COMBATANT_INFO.
 struct Player {
@@ -164,15 +154,17 @@ struct PartyStatus {
 class ShotCallEngine {
 public:
     // call_lead is how early a call may fire; late_grace is how late it may
-    // fire; reservation_window reserves an assigned ability after dispatch.
+    // fire; reservation_window reserves an assigned ability after dispatch;
+    // party_status_interval is clamped to 20-30 seconds.
     explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 2500 },
         ch::milliseconds late_grace                    = ch::milliseconds { 1000 },
-        ch::milliseconds reservation_window            = ch::milliseconds { 3000 });
+        ch::milliseconds reservation_window            = ch::milliseconds { 3000 },
+        ch::milliseconds party_status_interval         = ch::milliseconds { 25000 });
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
-    void set_shotcall_callback(ShotCallCallback callback);
-    // Dispatches every call whose window contains now and returns the number
-    // of callbacks invoked. Expired calls are dropped, not announced.
+    void set_shotcall_callback(MessageCallback callback);
+    // Dispatches every call whose window contains now, emits a party status
+    // message when one is due, and returns the number of messages delivered.
     std::size_t dispatch_due(ch::time_point<ch::system_clock> now);
     // Dispatches calls until stop is requested, waiting for the next due time
     // or a new schedule change.
@@ -199,9 +191,14 @@ private:
     bool player_in_current_run(const std::string& guid, const Player& player) const;
     // Drops tracked enemies and their queued calls.
     void clear_enemies_and_calls();
-    // Processes due and expired calls, returning the callbacks to invoke.
-    std::vector<DispatchedCall> dispatch_due_locked(
+    // Processes due and expired calls plus party status, returning the messages.
+    std::vector<EngineMessage> dispatch_due_locked(
         ch::time_point<ch::system_clock> now);
+    // Caller must hold mtx_. Queues a status message when the interval elapsed.
+    void append_party_status_locked(
+        ch::time_point<ch::system_clock> now, std::vector<EngineMessage>& messages);
+    // Caller must hold mtx_. Party status without locking.
+    PartyStatus party_status_locked() const;
     // Resyncs the enemy's matching ability from a real cast; unknown spells are ignored.
     void resync_from_cast(Enemy& enemy, const CombatEvent& event);
     // Resyncs the interrupted ability of the event's target enemy.
@@ -235,10 +232,13 @@ private:
     const ch::milliseconds call_lead_;
     const ch::milliseconds late_grace_;
     const ch::milliseconds reservation_window_;
-    ShotCallCallback shotcall_callback_;
+    const ch::milliseconds party_status_interval_;
+    MessageCallback shotcall_callback_;
     mutable std::mutex mtx_; // Guards all mutable state below
     std::condition_variable_any wakeup_;
     std::uint64_t queue_revision_ = 0;
+    std::uint64_t next_call_id_   = 1;
+    std::optional<ch::time_point<ch::system_clock>> party_status_since_;
     std::map<std::string, Player> roster_;
     std::map<std::string, Enemy> enemy_roster_;
     std::set<std::string> run_roster_;

@@ -123,8 +123,8 @@ TEST(Engine, FirstEventInterrupt_IdentifiesWarriorAndAppliesCooldown)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     // Pummel is on cooldown until now+15s, so the 4s call has no interrupter.
@@ -153,8 +153,8 @@ TEST(Engine, FirstEventCrowdControl_IdentifiesWarrior)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     engine.dispatch_due(now + ch::milliseconds { 8900 });
@@ -182,8 +182,8 @@ TEST(Engine, UnknownFirstSpell_IgnoredUntilIdentified)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 1 } + ch::seconds { 4 });
@@ -211,8 +211,8 @@ TEST(Engine, UnknownSpecCombatantInfo_DoesNotBlockIdentification)
     engine.handle_event(enemy);
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 1 } + ch::seconds { 4 });
@@ -243,8 +243,8 @@ TEST(Engine, InterruptCast_PutsOnCooldown)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -309,8 +309,8 @@ TEST(Engine, PlayerDeath_MarkedDead)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -349,8 +349,8 @@ TEST(Engine, BattleRez_RevivesPlayer)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     // Dispatch within 1s window before first shotcall (first_cast=4000ms)
@@ -400,8 +400,8 @@ TEST(Engine, IdentifyEnemy_TrackedNPC)
 
     // Should have generated shotcalls -- dispatch should work
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
     // First shotcall for 216293 (AoE Barrage) is at combat_start + 4000ms
     const std::size_t dispatched = engine.dispatch_due(now + ch::seconds { 4 });
@@ -457,8 +457,8 @@ TEST(Engine, IdentifyEnemy_MultipleSpells)
 
     // Should have shotcalls from both spells
     std::vector<std::string> callouts;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callouts.push_back(dispatched.text);
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callouts.push_back(message.text);
     });
 
     // Dispatch multiple times covering both first_cast times
@@ -482,8 +482,10 @@ TEST(Engine, GenerateShotcalls_CorrectCount)
     engine.handle_event(ev);
 
     int count = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
-        count++;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++count;
+        }
     });
 
     // Dispatch at each exact call_time (must be within 1s window)
@@ -509,7 +511,7 @@ TEST(Engine, GenerateShotcalls_SortedByTime)
     engine.handle_event(ev);
 
     std::vector<ch::system_clock::time_point> dispatch_times;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
+    engine.set_shotcall_callback([&](const EngineMessage&) {
         dispatch_times.push_back(ch::system_clock::now());
     });
 
@@ -539,8 +541,8 @@ TEST(Engine, Dispatch_AvailableInterrupter)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -573,8 +575,8 @@ TEST(Engine, Dispatch_InterrupterOnCooldown_AssignsNext)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -602,8 +604,8 @@ TEST(Engine, Dispatch_AllOnCooldown_GoingOff)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -628,8 +630,8 @@ TEST(Engine, Dispatch_DeadPlayerSkipped)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
@@ -653,8 +655,8 @@ TEST(Engine, Dispatch_StunRow_AssignsCcer)
     engine.handle_event(enemy_ev);
 
     std::string last_callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        last_callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        last_callout = message.text;
     });
 
     // First cast at 8900ms
@@ -678,26 +680,26 @@ TEST(Engine, Mechanics_TextOnlyRowsIgnoreAvailableAssignees)
                   "Creature-0-0-0-0-" + std::string(npc_id) + "-ABC", "Mob", ENEMY_FLAG,
                   "Player-1-AAA", spell_id, std::string(npc_id), now));
 
-              DispatchedCall dispatched;
+              EngineMessage dispatched;
               engine.set_shotcall_callback(
-                  [&](const DispatchedCall& call) { dispatched = call; });
+                  [&](const EngineMessage& message) { dispatched = message; });
               engine.dispatch_due(now + first_cast - ch::milliseconds { 2500 });
               return dispatched;
           };
 
-    const DispatchedCall dispel = dispatched_for("234957", 1221483, ch::milliseconds { 15000 });
+    const EngineMessage dispel = dispatched_for("234957", 1221483, ch::milliseconds { 15000 });
     EXPECT_EQ(dispel.text, "Dispel Dispel soon");
     EXPECT_FALSE(dispel.assignment.has_value());
 
-    const DispatchedCall tank_hit = dispatched_for("242631", 1235368, ch::milliseconds { 6900 });
+    const EngineMessage tank_hit = dispatched_for("242631", 1235368, ch::milliseconds { 6900 });
     EXPECT_EQ(tank_hit.text, "Tank Tank Frontal soon");
     EXPECT_FALSE(tank_hit.assignment.has_value());
 
-    const DispatchedCall movement = dispatched_for("236995", 1226111, ch::milliseconds { 15000 });
+    const EngineMessage movement = dispatched_for("236995", 1226111, ch::milliseconds { 15000 });
     EXPECT_EQ(movement.text, "Ejection soon");
     EXPECT_FALSE(movement.assignment.has_value());
 
-    const DispatchedCall awareness = dispatched_for("214761", 431364, ch::milliseconds { 3300 });
+    const EngineMessage awareness = dispatched_for("214761", 431364, ch::milliseconds { 3300 });
     EXPECT_EQ(awareness.text, "Ray soon");
     EXPECT_FALSE(awareness.assignment.has_value());
 }
@@ -927,8 +929,8 @@ TEST(Engine, ClassKnowledgeSurvivesBetweenKeys)
         ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }), 1u);
@@ -955,8 +957,8 @@ TEST(Engine, PreviousRunPlayerNotInSnapshotIsNotAssigned)
         ENEMY_FLAG, "Player-1-PALA", 434793, "216293", key_two + ch::milliseconds { 1 }));
 
     std::string callout;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        callout = dispatched.text;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        callout = message.text;
     });
 
     EXPECT_EQ(engine.dispatch_due(key_two + ch::milliseconds { 1 } + ch::seconds { 4 }), 1u);
@@ -975,7 +977,7 @@ TEST(Engine, DispatchDue_RespectsLeadWindow)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
+    engine.set_shotcall_callback([&](const EngineMessage&) {
         ++callbacks;
     });
 
@@ -994,19 +996,22 @@ TEST(Engine, DispatchDue_LateWithinGraceAndRecurrenceAfterExpiry)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    int callbacks = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
-        ++callbacks;
+    int shotcalls = 0;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++shotcalls;
+        }
     });
 
     // 999ms late is still inside the 1000ms grace.
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 4999 }), 1u);
+    engine.dispatch_due(now + ch::milliseconds { 4999 });
+    EXPECT_EQ(shotcalls, 1);
     // The next occurrence is due at now+20900ms and has expired at now+22400ms.
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 22400 }), 0u);
-    EXPECT_EQ(callbacks, 1);
+    engine.dispatch_due(now + ch::milliseconds { 22400 });
+    EXPECT_EQ(shotcalls, 1);
     // Expiry still advanced the recurrence: the following occurrence is announced.
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 37800 }), 1u);
-    EXPECT_EQ(callbacks, 2);
+    engine.dispatch_due(now + ch::milliseconds { 37800 });
+    EXPECT_EQ(shotcalls, 2);
 }
 
 TEST(Engine, DispatchDue_BacklogDispatchesDueCallInSamePass)
@@ -1026,7 +1031,7 @@ TEST(Engine, DispatchDue_BacklogDispatchesDueCallInSamePass)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::milliseconds { 5000 }));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
+    engine.set_shotcall_callback([&](const EngineMessage&) {
         ++callbacks;
     });
 
@@ -1047,8 +1052,8 @@ TEST(Engine, DispatchDue_DispatchesInDueOrder)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     std::vector<std::string> enemy_order;
-    engine.set_shotcall_callback([&](const DispatchedCall& dispatched) {
-        enemy_order.push_back(dispatched.call.enemy_guid);
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        enemy_order.push_back(message.enemy_guid);
     });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 4000 }), 2u);
@@ -1066,7 +1071,7 @@ TEST(Engine, DispatchDue_LazyRecurrenceOneCooldownLater)
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
+    engine.set_shotcall_callback([&](const EngineMessage&) {
         ++callbacks;
     });
 
@@ -1090,7 +1095,7 @@ TEST(Engine, DispatchDue_EnemyDeathLazilyCancelsCalls)
     engine.handle_event(death);
 
     int callbacks = 0;
-    engine.set_shotcall_callback([&](const DispatchedCall&) {
+    engine.set_shotcall_callback([&](const EngineMessage&) {
         ++callbacks;
     });
 
@@ -1152,19 +1157,26 @@ TEST(Engine, ResyncLaterCastMovesNextCall)
     engine.handle_event(make_event("SPELL_CAST_START", enemy_guid, "Mob", ENEMY_FLAG,
         "Player-1-AAA", 463218, "210269", now + ch::seconds { 10 }));
 
-    std::optional<ScheduledShotCall> last_call;
-    engine.set_shotcall_callback(
-        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
+    std::size_t shotcalls = 0;
+    std::optional<EngineMessage> last_message;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++shotcalls;
+            last_message = message;
+        }
+    });
 
     // The stale prediction at now+8500ms is discarded when its turn comes.
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 8500 }), 0u);
-    EXPECT_FALSE(last_call.has_value());
+    engine.dispatch_due(now + ch::milliseconds { 8500 });
+    EXPECT_EQ(shotcalls, 0u);
+    EXPECT_FALSE(last_message.has_value());
 
     // The resynced occurrence is due one cooldown after the actual cast.
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 31700 }), 1u);
-    ASSERT_TRUE(last_call.has_value());
-    EXPECT_EQ(last_call->origin, CallOrigin::Resync);
-    EXPECT_EQ(last_call->due, now + ch::milliseconds { 34200 });
+    engine.dispatch_due(now + ch::milliseconds { 31700 });
+    EXPECT_EQ(shotcalls, 1u);
+    ASSERT_TRUE(last_message.has_value());
+    EXPECT_EQ(last_message->origin, CallOrigin::Resync);
+    EXPECT_EQ(last_message->due, now + ch::milliseconds { 34200 });
 }
 
 TEST(Engine, ResyncEarlierCastMovesNextCall)
@@ -1179,15 +1191,22 @@ TEST(Engine, ResyncEarlierCastMovesNextCall)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", enemy_guid, "Mob", ENEMY_FLAG,
         "Player-1-AAA", 463218, "210269", now + ch::seconds { 7 }));
 
-    std::optional<ScheduledShotCall> last_call;
-    engine.set_shotcall_callback(
-        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
+    std::size_t shotcalls = 0;
+    std::optional<EngineMessage> last_message;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::ShotCall) {
+            ++shotcalls;
+            last_message = message;
+        }
+    });
 
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 8500 }), 0u);
-    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 28700 }), 1u);
-    ASSERT_TRUE(last_call.has_value());
-    EXPECT_EQ(last_call->origin, CallOrigin::Resync);
-    EXPECT_EQ(last_call->due, now + ch::milliseconds { 31200 });
+    engine.dispatch_due(now + ch::milliseconds { 8500 });
+    EXPECT_EQ(shotcalls, 0u);
+    engine.dispatch_due(now + ch::milliseconds { 28700 });
+    EXPECT_EQ(shotcalls, 1u);
+    ASSERT_TRUE(last_message.has_value());
+    EXPECT_EQ(last_message->origin, CallOrigin::Resync);
+    EXPECT_EQ(last_message->due, now + ch::milliseconds { 31200 });
 }
 
 TEST(Engine, InterruptResyncsInterruptedSpell)
@@ -1205,16 +1224,16 @@ TEST(Engine, InterruptResyncsInterruptedSpell)
     interrupt.interrupted_spell_id = 434793;
     engine.handle_event(interrupt);
 
-    std::optional<ScheduledShotCall> last_call;
+    std::optional<EngineMessage> last_message;
     engine.set_shotcall_callback(
-        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
+        [&](const EngineMessage& message) { last_message = message; });
 
     // The original prediction at now+4000ms is stale; the interrupted ability is rescheduled.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 4000 }), 0u);
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 16400 }), 1u);
-    ASSERT_TRUE(last_call.has_value());
-    EXPECT_EQ(last_call->origin, CallOrigin::Resync);
-    EXPECT_EQ(last_call->due, now + ch::milliseconds { 18900 });
+    ASSERT_TRUE(last_message.has_value());
+    EXPECT_EQ(last_message->origin, CallOrigin::Resync);
+    EXPECT_EQ(last_message->due, now + ch::milliseconds { 18900 });
 }
 
 TEST(Engine, UnknownSpellDoesNotDisturbSchedule)
@@ -1229,15 +1248,15 @@ TEST(Engine, UnknownSpellDoesNotDisturbSchedule)
     engine.handle_event(make_event("SPELL_CAST_START", enemy_guid, "Mob", ENEMY_FLAG,
         "Player-1-AAA", 999999, "216293", now + ch::seconds { 2 }));
 
-    std::optional<ScheduledShotCall> last_call;
+    std::optional<EngineMessage> last_message;
     engine.set_shotcall_callback(
-        [&](const DispatchedCall& dispatched) { last_call = dispatched.call; });
+        [&](const EngineMessage& message) { last_message = message; });
 
     // The original prediction is untouched and fires at its lead boundary.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
-    ASSERT_TRUE(last_call.has_value());
-    EXPECT_EQ(last_call->origin, CallOrigin::Prediction);
-    EXPECT_EQ(last_call->due, now + ch::milliseconds { 4000 });
+    ASSERT_TRUE(last_message.has_value());
+    EXPECT_EQ(last_message->origin, CallOrigin::Prediction);
+    EXPECT_EQ(last_message->due, now + ch::milliseconds { 4000 });
 }
 
 TEST(Engine, SpokenText_UsesKickAndStopTemplates)
@@ -1253,7 +1272,7 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
+            [&](const EngineMessage& message) { callout = message.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6000 }), 1u);
         EXPECT_EQ(callout, "Tank kick DoT soon");
@@ -1269,7 +1288,7 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
+            [&](const EngineMessage& message) { callout = message.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6400 }), 1u);
         EXPECT_EQ(callout, "Tank stop AOE soon");
@@ -1283,7 +1302,7 @@ TEST(Engine, SpokenText_UsesKickAndStopTemplates)
 
         std::string callout;
         engine.set_shotcall_callback(
-            [&](const DispatchedCall& dispatched) { callout = dispatched.text; });
+            [&](const EngineMessage& message) { callout = message.text; });
 
         EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6000 }), 1u);
         EXPECT_NE(callout.find("this one is going off"), std::string::npos);
@@ -1307,8 +1326,8 @@ TEST(Engine, InterruptCooldownsTrackIndividualSpells)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    DispatchedCall dispatched;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+    EngineMessage dispatched;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { dispatched = message; });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
     ASSERT_TRUE(dispatched.assignment.has_value());
@@ -1328,8 +1347,8 @@ TEST(Engine, SkullBashCooldownDoesNotBlockSolarBeam)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    DispatchedCall dispatched;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+    EngineMessage dispatched;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { dispatched = message; });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
     ASSERT_TRUE(dispatched.assignment.has_value());
@@ -1353,23 +1372,23 @@ TEST(Engine, ReservationPreventsImmediateReassignment)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-C", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 4 }));
 
-    std::vector<DispatchedCall> calls;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { calls.push_back(call); });
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { messages.push_back(message); });
 
     // First call: Tank is assigned and reserved until now+7000ms.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
-    ASSERT_EQ(calls.size(), 1u);
-    ASSERT_TRUE(calls[0].assignment.has_value());
+    ASSERT_EQ(messages.size(), 1u);
+    ASSERT_TRUE(messages[0].assignment.has_value());
 
     // Second call at now+5000ms is inside the reservation: no assignee.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 2500 }), 1u);
-    ASSERT_EQ(calls.size(), 2u);
-    EXPECT_FALSE(calls[1].assignment.has_value());
+    ASSERT_EQ(messages.size(), 2u);
+    EXPECT_FALSE(messages[1].assignment.has_value());
 
     // Third call at now+8000ms is past the reservation: Tank is available again.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 5500 }), 1u);
-    ASSERT_EQ(calls.size(), 3u);
-    ASSERT_TRUE(calls[2].assignment.has_value());
+    ASSERT_EQ(messages.size(), 3u);
+    ASSERT_TRUE(messages[2].assignment.has_value());
 }
 
 TEST(Engine, RealCastOverwritesReservation)
@@ -1383,12 +1402,12 @@ TEST(Engine, RealCastOverwritesReservation)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-A", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    std::vector<DispatchedCall> calls;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { calls.push_back(call); });
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { messages.push_back(message); });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
-    ASSERT_EQ(calls.size(), 1u);
-    ASSERT_TRUE(calls[0].assignment.has_value());
+    ASSERT_EQ(messages.size(), 1u);
+    ASSERT_TRUE(messages[0].assignment.has_value());
 
     // The real Pummel cast replaces the reservation with its 15s cooldown.
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
@@ -1399,8 +1418,8 @@ TEST(Engine, RealCastOverwritesReservation)
     // At now+8000ms only the reservation would be over; the real cast keeps
     // Pummel on cooldown until now+20000ms.
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 5500 }), 1u);
-    ASSERT_EQ(calls.size(), 2u);
-    EXPECT_FALSE(calls[1].assignment.has_value());
+    ASSERT_EQ(messages.size(), 2u);
+    EXPECT_FALSE(messages[1].assignment.has_value());
 }
 
 TEST(Engine, LruChoosesEarliestReadyPlayer)
@@ -1422,8 +1441,8 @@ TEST(Engine, LruChoosesEarliestReadyPlayer)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 14 }));
 
-    DispatchedCall dispatched;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+    EngineMessage dispatched;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { dispatched = message; });
 
     // The call is due at now+18000ms; both players are ready, but BBB has been
     // ready longer, so it wins despite AAA sorting first by GUID.
@@ -1445,8 +1464,8 @@ TEST(Engine, LruTieBreaksByGuidOrder)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    DispatchedCall dispatched;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+    EngineMessage dispatched;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { dispatched = message; });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
     ASSERT_TRUE(dispatched.assignment.has_value());
@@ -1467,10 +1486,224 @@ TEST(Engine, DeadPlayerIsSkippedForAssignment)
     engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
 
-    DispatchedCall dispatched;
-    engine.set_shotcall_callback([&](const DispatchedCall& call) { dispatched = call; });
+    EngineMessage dispatched;
+    engine.set_shotcall_callback([&](const EngineMessage& message) { dispatched = message; });
 
     EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 1500 }), 1u);
     ASSERT_TRUE(dispatched.assignment.has_value());
     EXPECT_EQ(dispatched.assignment->player_guid, "Player-1-BBB");
+}
+
+// ==================== Delivery messages ====================
+
+TEST(Engine, EngineMessage_ShotCallFieldsArePopulated)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_START", "Creature-0-0-0-0-210269-ABC", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 463218, "210269", now));
+
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        messages.push_back(message);
+    });
+
+    EXPECT_EQ(engine.dispatch_due(now + ch::milliseconds { 6000 }), 1u);
+    ASSERT_EQ(messages.size(), 1u);
+
+    const EngineMessage& message = messages[0];
+    EXPECT_EQ(message.type, MessageType::ShotCall);
+    EXPECT_EQ(message.text, "Tank kick DoT soon");
+    EXPECT_EQ(message.enemy_guid, "Creature-0-0-0-0-210269-ABC");
+    EXPECT_EQ(message.mechanic, "kick");
+    EXPECT_EQ(message.spell_id, 463218);
+    EXPECT_EQ(message.due, now + ch::milliseconds { 8500 });
+    EXPECT_EQ(message.origin, CallOrigin::Prediction);
+    EXPECT_GT(message.call_id, 0u);
+    ASSERT_TRUE(message.assignment.has_value());
+    EXPECT_EQ(message.assignment->player_guid, "Player-1-AAA");
+    EXPECT_EQ(message.assignment->spell_name, "Pummel");
+}
+
+TEST(Engine, EngineMessage_CallIdsIncrease)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-A", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-B", "Mob",
+        ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now + ch::seconds { 1 }));
+
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        messages.push_back(message);
+    });
+
+    engine.dispatch_due(now + ch::milliseconds { 1500 });
+    engine.dispatch_due(now + ch::milliseconds { 2500 });
+    ASSERT_EQ(messages.size(), 2u);
+    EXPECT_LT(messages[0].call_id, messages[1].call_id);
+}
+
+TEST(Engine, PartyStatus_EmittedAfterInterval)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now)); // one identified of an expected five
+
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        messages.push_back(message);
+    });
+
+    // The default interval is 25s and nothing is emitted before it.
+    engine.dispatch_due(now + ch::milliseconds { 24999 });
+    EXPECT_TRUE(messages.empty());
+
+    engine.dispatch_due(now + ch::milliseconds { 25000 });
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_EQ(messages[0].type, MessageType::PartyStatus);
+    EXPECT_EQ(messages[0].text,
+        "1/5 players identified. Use your class ability to identify yourself. (enable advanced "
+        "combat logging for automatic detection)");
+
+    // Emitted at most once per interval.
+    engine.dispatch_due(now + ch::milliseconds { 25001 });
+    EXPECT_EQ(messages.size(), 1u);
+    engine.dispatch_due(now + ch::milliseconds { 50000 });
+    EXPECT_EQ(messages.size(), 2u);
+}
+
+TEST(Engine, PartyStatus_StopsWhenIdentifiedMatchesExpectedAndResetsOnRunEnd)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+
+    // Five identified players with no snapshot: identified == expected == 5.
+    for (int i = 0; i < 5; ++i) {
+        const std::string guid = "Player-1-" + std::to_string(i);
+        engine.handle_event(make_event("SPELL_CAST_SUCCESS", guid, "P" + std::to_string(i),
+            PLAYER_FLAG, "Player-1-BBB", 6673, "", now));
+    }
+
+    std::vector<EngineMessage> messages;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        messages.push_back(message);
+    });
+
+    engine.dispatch_due(now + ch::milliseconds { 30000 });
+    EXPECT_TRUE(messages.empty());
+
+    // A new run keeps class knowledge but only one player is current.
+    engine.handle_event(
+        make_event("CHALLENGE_MODE_END", "", "", "", "", 0, "", now + ch::seconds { 31 }));
+    const auto key_two = now + ch::seconds { 32 };
+    engine.handle_event(make_challenge_start(key_two));
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-2-AAA", "Solo", PLAYER_FLAG,
+        "Player-2-BBB", 6673, "", key_two));
+
+    engine.dispatch_due(key_two + ch::milliseconds { 24999 });
+    EXPECT_TRUE(messages.empty());
+    engine.dispatch_due(key_two + ch::milliseconds { 25000 });
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_EQ(messages[0].text.find("1/5"), 0u);
+}
+
+TEST(Engine, PartyStatus_IntervalIsClamped)
+{
+    {
+        ShotCallEngine engine { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+            ch::milliseconds { 3000 }, ch::milliseconds { 1000 } };
+        auto now = ch::system_clock::now();
+        engine.handle_event(make_challenge_start(now));
+        engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+            "Player-1-BBB", 6673, "", now));
+
+        int statuses = 0;
+        engine.set_shotcall_callback([&](const EngineMessage& message) {
+            if (message.type == MessageType::PartyStatus) {
+                ++statuses;
+            }
+        });
+
+        // Below the minimum, the interval is clamped to 20s.
+        engine.dispatch_due(now + ch::milliseconds { 19999 });
+        EXPECT_EQ(statuses, 0);
+        engine.dispatch_due(now + ch::milliseconds { 20000 });
+        EXPECT_EQ(statuses, 1);
+    }
+    {
+        ShotCallEngine engine { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+            ch::milliseconds { 3000 }, ch::milliseconds { 45000 } };
+        auto now = ch::system_clock::now();
+        engine.handle_event(make_challenge_start(now));
+        engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+            "Player-1-BBB", 6673, "", now));
+
+        int statuses = 0;
+        engine.set_shotcall_callback([&](const EngineMessage& message) {
+            if (message.type == MessageType::PartyStatus) {
+                ++statuses;
+            }
+        });
+
+        // Above the maximum, the interval is clamped to 30s.
+        engine.dispatch_due(now + ch::milliseconds { 29999 });
+        EXPECT_EQ(statuses, 0);
+        engine.dispatch_due(now + ch::milliseconds { 30000 });
+        EXPECT_EQ(statuses, 1);
+    }
+}
+
+TEST(Engine, PartyStatus_NotEmittedWhileIdle)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now)); // identified, but no run is active
+
+    int statuses = 0;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::PartyStatus) {
+            ++statuses;
+        }
+    });
+
+    engine.dispatch_due(now + ch::seconds { 60 });
+    EXPECT_EQ(statuses, 0);
+}
+
+TEST(Engine, PartyStatus_OmitsAdvancedLoggingNoteWhenEnabled)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_challenge_start(now));
+
+    auto version             = make_event("COMBAT_LOG_VERSION", "", "", "", "", 0, "", now);
+    version.advanced_logging = true;
+    engine.handle_event(version);
+    engine.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now));
+
+    EngineMessage status;
+    int statuses = 0;
+    engine.set_shotcall_callback([&](const EngineMessage& message) {
+        if (message.type == MessageType::PartyStatus) {
+            ++statuses;
+            status = message;
+        }
+    });
+
+    engine.dispatch_due(now + ch::milliseconds { 25000 });
+    EXPECT_EQ(statuses, 1);
+    EXPECT_EQ(status.text, "1/5 players identified. Use your class ability to identify yourself.");
 }

@@ -353,6 +353,27 @@ enum class Mechanic : std::uint8_t { Kick,
     Movement,
     Awareness };
 
+// Returns the delivery protocol name for a mechanic.
+constexpr std::string_view get_mechanic_name(Mechanic mechanic)
+{
+    switch (mechanic) {
+    case Mechanic::Kick:
+        return "kick";
+    case Mechanic::Stun:
+        return "stop";
+    case Mechanic::Dispel:
+        return "dispel";
+    case Mechanic::TankHit:
+        return "tank";
+    case Mechanic::Movement:
+        return "movement";
+    case Mechanic::Awareness:
+        return "awareness";
+    }
+
+    return "awareness";
+}
+
 // Immutable static data for one tracked enemy ability.
 struct EnemySpellProfile {
     std::string_view enemy_id;
