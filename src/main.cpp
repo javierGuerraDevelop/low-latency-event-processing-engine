@@ -37,7 +37,9 @@ int main(int argc, char* argv[])
         });
 
     // Run process_shotcalls on a background thread
-    std::thread shotcall_thread { [&engine]() { engine.process_shotcalls(); } };
+    std::jthread shotcall_thread { [&engine](std::stop_token stop_token) {
+        engine.process_shotcalls(stop_token);
+    } };
 
     // Find and monitor the log file
     std::string combat_log_file = get_latest_combat_log(argv[1]);
@@ -48,6 +50,6 @@ int main(int argc, char* argv[])
 
     monitor_file(combat_log_file, engine);
 
-    shotcall_thread.join();
+    shotcall_thread.request_stop();
     return 0;
 }

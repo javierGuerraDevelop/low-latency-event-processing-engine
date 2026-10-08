@@ -8,7 +8,7 @@ Real-time WoW Mythic+ shotcaller. Parses the combat log, tracks enemy ability ti
 WoW Combat Log → C++ Engine → TCP Socket → Discord Bot → ElevenLabs TTS → Voice Channel
 ```
 
-- **C++ engine** — Tail-follows the combat log, identifies players/enemies from spells, generates a time-sorted queue of upcoming ability casts, and dispatches callouts assigning the best available interrupter or CCer.
+- **C++ engine** — Tail-follows the combat log, identifies players/enemies from spells, schedules each enemy ability's next occurrence lazily, and dispatches callouts from an event-driven loop assigning the best available interrupter or CCer.
 - **Discord bot** — Python bot that receives callouts over TCP (port 9999) and plays them as TTS audio using ElevenLabs.
 
 ## Run boundaries and roster

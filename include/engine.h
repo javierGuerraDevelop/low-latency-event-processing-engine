@@ -1,20 +1,23 @@
 // Core shotcall engine. Tracks party members, enemies, and their ability
-// cooldowns. When an enemy is identified, generates a time-sorted queue of
-// upcoming shotcalls. A background thread dispatches callouts at the right
-// time, assigning available interrupters or CC users to each call.
+// cooldowns. When an enemy is identified, schedules its abilities lazily and
+// dispatches callouts from an event-driven loop, assigning available
+// interrupters or CC users to each call.
 
 #ifndef SHOTCALLERCPP_ENGINE_H
 #define SHOTCALLERCPP_ENGINE_H
 
 #include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <list>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -47,6 +50,9 @@ struct EnemyAbility {
     ch::milliseconds cooldown;
     std::string callout;
     bool is_interruptable;
+    // Runtime scheduling state, advanced after each occurrence.
+    ch::time_point<ch::system_clock> next_due { };
+    std::uint64_t generation = 0;
 
     EnemyAbility(int ability_id, ch::milliseconds first_cast_delay, ch::milliseconds cooldown_duration,
         std::string callout_text, bool interruptable)
@@ -57,6 +63,15 @@ struct EnemyAbility {
         , is_interruptable { interruptable }
     {
     }
+};
+
+// One predicted cast waiting for its announcement window.
+struct ScheduledShotCall {
+    std::string enemy_guid;
+    int spell_id;
+    std::string callout;
+    ch::time_point<ch::system_clock> due;
+    std::uint64_t generation;
 };
 
 // A party member known by GUID. The name may stay empty until an event
@@ -118,15 +133,19 @@ struct PartyStatus {
 
 class ShotCallEngine {
 public:
+    // call_lead is how early a call may fire; late_grace is how late it may fire.
+    explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 1000 },
+        ch::milliseconds late_grace                    = ch::milliseconds { 1000 });
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
     void set_shotcall_callback(
         std::function<void(const std::string&, const std::string&)> callback);
-    // Runs on a background thread; dispatches queued shotcalls at their scheduled time.
-    void process_shotcalls();
-    // Acquires mtx_ itself. Dispatches the next shotcall if one is due and
-    // returns true when a callback was invoked.
-    bool dispatch_next_shotcall(ch::time_point<ch::system_clock> now);
+    // Dispatches every call whose window contains now and returns the number
+    // of callbacks invoked. Expired calls are dropped, not announced.
+    std::size_t dispatch_due(ch::time_point<ch::system_clock> now);
+    // Dispatches calls until stop is requested, waiting for the next due time
+    // or a new schedule change.
+    void process_shotcalls(std::stop_token stop_token);
     // Returns a snapshot of party identification state.
     PartyStatus party_status() const;
 
@@ -149,26 +168,38 @@ private:
     bool player_in_current_run(const std::string& guid, const Player& player) const;
     // Drops tracked enemies and their queued calls.
     void clear_enemies_and_calls();
+    // Processes due and expired calls, returning the callbacks to invoke.
+    std::vector<std::pair<std::string, std::string>> dispatch_due_locked(
+        ch::time_point<ch::system_clock> now);
+    // Queues the ability's next occurrence and wakes the scheduler thread.
+    void enqueue_shotcall_locked(const std::string& enemy_guid, const EnemyAbility& ability);
+    // Moves an ability one cooldown forward and queues the next occurrence.
+    void advance_recurrence(Enemy& enemy, EnemyAbility& ability);
+    // Wakes the scheduler after a schedule or enemy change.
+    void wake_scheduler_locked();
+    // Earliest time the scheduler should wake, if any call can fire.
+    std::optional<ch::time_point<ch::system_clock>> next_actionable_time_locked() const;
     // Auto-detects player class or enemy type from combat event spells.
     void identify_player(const CombatEvent& event);
     void identify_enemy(const CombatEvent& event);
     // Fills a roster player's name if it is still empty.
     void learn_player_name(const std::string& guid, std::string_view name);
-    // Pre-computes all shotcalls for an enemy over a 5-minute window.
-    void generate_shotcalls(Enemy& enemy);
     // Returns the name of a living player whose interrupt/CC is off cooldown
     // at call_time, or a fallback message if none available.
     std::string find_available_interrupter(const ch::time_point<ch::system_clock>& call_time);
     std::string find_available_ccer(const ch::time_point<ch::system_clock>& call_time);
 
+    const ch::milliseconds call_lead_;
+    const ch::milliseconds late_grace_;
     std::function<void(const std::string&, const std::string&)> shotcall_callback_;
     mutable std::mutex mtx_; // Guards all mutable state below
+    std::condition_variable_any wakeup_;
+    std::uint64_t queue_revision_ = 0;
     std::map<std::string, Player> roster_;
     std::map<std::string, Enemy> enemy_roster_;
     std::set<std::string> run_roster_;
-    // Queue entries: (is_interruptable, enemy_guid, callout_text, scheduled_time)
-    std::list<std::tuple<bool, std::string, std::string, ch::time_point<ch::system_clock>>>
-        shot_call_queue_;
+    // Scheduled calls ordered by their predicted cast time.
+    std::multimap<ch::time_point<ch::system_clock>, ScheduledShotCall> shot_call_queue_;
     RunState run_state_           = RunState::Idle;
     bool encounter_active_        = false;
     bool party_size_ok_           = true;
