@@ -135,10 +135,12 @@ std::string format_spoken_call(
 } // namespace
 
 ShotCallEngine::ShotCallEngine(ch::milliseconds call_lead, ch::milliseconds late_grace,
-    ch::milliseconds reservation_window)
+    ch::milliseconds reservation_window, ch::milliseconds party_status_interval)
     : call_lead_ { call_lead }
     , late_grace_ { late_grace }
     , reservation_window_ { reservation_window }
+    , party_status_interval_ { std::clamp(
+          party_status_interval, ch::milliseconds { 20000 }, ch::milliseconds { 30000 }) }
 {
 }
 
@@ -182,9 +184,10 @@ bool ShotCallEngine::handle_boundary_event(const CombatEvent& event)
 {
     if (event.event_type == "CHALLENGE_MODE_START") {
         clear_enemies_and_calls();
-        run_state_      = RunState::ChallengeActive;
-        run_started_at_ = event.time_stamp;
-        party_size_ok_  = true;
+        run_state_          = RunState::ChallengeActive;
+        run_started_at_     = event.time_stamp;
+        party_size_ok_      = true;
+        party_status_since_ = event.time_stamp;
         begin_roster_snapshot(event.time_stamp);
         return true;
     }
@@ -198,12 +201,14 @@ bool ShotCallEngine::handle_boundary_event(const CombatEvent& event)
         run_state_        = RunState::Idle;
         encounter_active_ = false;
         party_size_ok_    = true;
+        party_status_since_.reset();
         reset_roster_snapshot();
         return true;
     }
 
     if (event.event_type == "ENCOUNTER_START") {
-        encounter_active_ = true;
+        encounter_active_   = true;
+        party_status_since_ = event.time_stamp;
         begin_roster_snapshot(event.time_stamp);
         party_size_ok_ = event.group_size == 5;
         if (!party_size_ok_) {
@@ -225,6 +230,7 @@ bool ShotCallEngine::handle_boundary_event(const CombatEvent& event)
             clear_enemies_and_calls();
             encounter_active_ = false;
             party_size_ok_    = true;
+            party_status_since_.reset();
             reset_roster_snapshot();
         }
         current_zone_id_ = event.instance_id;
@@ -533,7 +539,7 @@ void ShotCallEngine::reserve_assignment(
     }
 }
 
-void ShotCallEngine::set_shotcall_callback(ShotCallCallback callback)
+void ShotCallEngine::set_shotcall_callback(MessageCallback callback)
 {
     shotcall_callback_ = std::move(callback);
 }
@@ -541,7 +547,11 @@ void ShotCallEngine::set_shotcall_callback(ShotCallCallback callback)
 PartyStatus ShotCallEngine::party_status() const
 {
     std::lock_guard<std::mutex> lock { mtx_ };
+    return party_status_locked();
+}
 
+PartyStatus ShotCallEngine::party_status_locked() const
+{
     PartyStatus status;
     status.roster_known     = roster_snapshot_known_;
     status.advanced_logging = advanced_logging_;
@@ -559,17 +569,42 @@ PartyStatus ShotCallEngine::party_status() const
     return status;
 }
 
-std::vector<DispatchedCall> ShotCallEngine::dispatch_due_locked(
+void ShotCallEngine::append_party_status_locked(
+    ch::time_point<ch::system_clock> now, std::vector<EngineMessage>& messages)
+{
+    const PartyStatus status = party_status_locked();
+    if (!status.in_run || status.identified >= status.expected) {
+        party_status_since_.reset();
+        return;
+    }
+    if (!party_status_since_) {
+        party_status_since_ = now;
+        return;
+    }
+    if (now - *party_status_since_ < party_status_interval_) {
+        return;
+    }
+
+    EngineMessage message;
+    message.type = MessageType::PartyStatus;
+    message.text = std::to_string(status.identified) + "/" + std::to_string(status.expected)
+        + " players identified. Use your class ability to identify yourself.";
+    if (!status.advanced_logging) {
+        message.text += " (enable advanced combat logging for automatic detection)";
+    }
+    message.call_id = next_call_id_++;
+    messages.push_back(std::move(message));
+    party_status_since_ = now;
+}
+
+std::vector<EngineMessage> ShotCallEngine::dispatch_due_locked(
     ch::time_point<ch::system_clock> now)
 {
     finalize_roster_snapshot_if_due(now, false);
-    if (!party_size_ok_) {
-        return { };
-    }
 
-    std::vector<DispatchedCall> calls;
+    std::vector<EngineMessage> messages;
     auto call_iter = shot_call_queue_.begin();
-    while (call_iter != shot_call_queue_.end()) {
+    while (party_size_ok_ && call_iter != shot_call_queue_.end()) {
         const ScheduledShotCall call = call_iter->second;
         auto enemy_iter              = enemy_roster_.find(call.enemy_guid);
         if (enemy_iter == enemy_roster_.end()) {
@@ -607,39 +642,52 @@ std::vector<DispatchedCall> ShotCallEngine::dispatch_due_locked(
         if (assignment) {
             reserve_assignment(*assignment, call.due);
         }
+
+        EngineMessage message;
+        message.type       = MessageType::ShotCall;
+        message.text       = format_spoken_call(*call.profile, assignment);
+        message.enemy_guid = call.enemy_guid;
+        message.mechanic   = std::string { Constants::get_mechanic_name(call.profile->mechanic) };
+        message.spell_id   = call.profile->spell_id;
+        message.due        = call.due;
+        message.call_id    = next_call_id_++;
+        message.origin     = call.origin;
+        message.assignment = assignment;
+
         advance_recurrence(enemy_iter->second, *ability);
         call_iter = shot_call_queue_.erase(call_iter);
-        calls.push_back(
-            DispatchedCall { call, assignment, format_spoken_call(*call.profile, assignment) });
+        messages.push_back(std::move(message));
     }
-    return calls;
+
+    append_party_status_locked(now, messages);
+    return messages;
 }
 
 std::size_t ShotCallEngine::dispatch_due(ch::time_point<ch::system_clock> now)
 {
-    std::vector<DispatchedCall> calls;
+    std::vector<EngineMessage> messages;
     {
         std::lock_guard<std::mutex> lock { mtx_ };
-        calls = dispatch_due_locked(now);
+        messages = dispatch_due_locked(now);
     }
 
-    for (const auto& dispatched : calls) {
+    for (const auto& message : messages) {
         if (shotcall_callback_) {
-            shotcall_callback_(dispatched);
+            shotcall_callback_(message);
         }
     }
-    return calls.size();
+    return messages.size();
 }
 
 void ShotCallEngine::process_shotcalls(std::stop_token stop_token)
 {
     while (!stop_token.stop_requested()) {
-        std::vector<DispatchedCall> calls;
+        std::vector<EngineMessage> messages;
         {
             std::unique_lock<std::mutex> lock { mtx_ };
-            calls = dispatch_due_locked(ch::system_clock::now());
+            messages = dispatch_due_locked(ch::system_clock::now());
 
-            if (calls.empty()) {
+            if (messages.empty()) {
                 const std::uint64_t revision = queue_revision_;
                 const auto changed           = [this, revision] { return queue_revision_ != revision; };
                 if (const auto deadline = next_actionable_time_locked(); deadline) {
@@ -650,9 +698,9 @@ void ShotCallEngine::process_shotcalls(std::stop_token stop_token)
             }
         }
 
-        for (const auto& dispatched : calls) {
+        for (const auto& message : messages) {
             if (shotcall_callback_) {
-                shotcall_callback_(dispatched);
+                shotcall_callback_(message);
             }
         }
     }

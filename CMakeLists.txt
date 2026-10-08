@@ -35,12 +35,12 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_executable(ShotCallerWow src/main.cpp src/parser.cpp src/line_reader.cpp src/engine.cpp
-                             src/line_writer.cpp src/socket_sender.cpp)
+                             src/line_writer.cpp src/socket_sender.cpp src/protocol.cpp)
 target_include_directories(ShotCallerWow PUBLIC include)
 target_link_libraries(ShotCallerWow PRIVATE shotcaller_warnings)
 
 # Static library for testable modules (no I/O)
-add_library(ShotCallerLib STATIC src/parser.cpp src/engine.cpp)
+add_library(ShotCallerLib STATIC src/parser.cpp src/engine.cpp src/protocol.cpp)
 target_include_directories(ShotCallerLib PUBLIC include)
 target_link_libraries(ShotCallerLib PRIVATE shotcaller_warnings)
 
@@ -61,6 +61,7 @@ add_executable(ShotCallerTests
     tests/test_parser.cpp
     tests/test_engine.cpp
     tests/test_integration.cpp
+    tests/test_protocol.cpp
 )
 target_link_libraries(ShotCallerTests PRIVATE ShotCallerLib GTest::gtest_main
                                              shotcaller_warnings)

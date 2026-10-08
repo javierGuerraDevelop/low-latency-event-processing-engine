@@ -41,3 +41,15 @@ jobs:
         run: pip install clang-format==23.1.1
       - name: Check formatting
         run: clang-format --dry-run --Werror src/*.cpp include/*.h tests/*.cpp
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r discord_bot/requirements-dev.txt
+      - name: Test
+        run: python -m pytest discord_bot/tests
