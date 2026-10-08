@@ -25,6 +25,10 @@
 
 namespace ch = std::chrono;
 
+namespace Constants {
+struct EnemySpellProfile;
+}
+
 // Tracks a player ability's cooldown state.
 struct AbilityState {
     int id;
@@ -43,26 +47,11 @@ struct AbilityState {
     }
 };
 
-// Describes an enemy's ability with its cast timing and callout text.
-struct EnemyAbility {
-    int id;
-    ch::milliseconds first_cast;
-    ch::milliseconds cooldown;
-    std::string callout;
-    bool is_interruptable;
-    // Runtime scheduling state, advanced after each occurrence.
+// Runtime scheduling state for one enemy ability; profile data stays immutable.
+struct EnemyAbilityRuntime {
+    const Constants::EnemySpellProfile* profile = nullptr;
     ch::time_point<ch::system_clock> next_due { };
     std::uint64_t generation = 0;
-
-    EnemyAbility(int ability_id, ch::milliseconds first_cast_delay, ch::milliseconds cooldown_duration,
-        std::string callout_text, bool interruptable)
-        : id { ability_id }
-        , first_cast { first_cast_delay }
-        , cooldown { cooldown_duration }
-        , callout { std::move(callout_text) }
-        , is_interruptable { interruptable }
-    {
-    }
 };
 
 // How a scheduled call was derived from the enemy's timeline.
@@ -72,8 +61,7 @@ enum class CallOrigin { Prediction,
 // One predicted cast waiting for its announcement window.
 struct ScheduledShotCall {
     std::string enemy_guid;
-    int spell_id;
-    std::string callout;
+    const Constants::EnemySpellProfile* profile = nullptr;
     ch::time_point<ch::system_clock> due;
     std::uint64_t generation;
     CallOrigin origin = CallOrigin::Prediction;
@@ -112,16 +100,14 @@ struct Player {
 // A tracked enemy and the abilities generated from its static profile.
 struct Enemy {
     std::string guid;
-    std::vector<EnemyAbility> spells;
+    std::vector<EnemyAbilityRuntime> spells;
     ch::time_point<ch::system_clock> first_seen_time;
-    bool is_ccable = false;
 
-    Enemy(std::string enemy_guid, std::vector<EnemyAbility> abilities,
-        ch::time_point<ch::system_clock> first_seen, bool ccable)
+    Enemy(std::string enemy_guid, std::vector<EnemyAbilityRuntime> abilities,
+        ch::time_point<ch::system_clock> first_seen)
         : guid { std::move(enemy_guid) }
         , spells { std::move(abilities) }
         , first_seen_time { first_seen }
-        , is_ccable { ccable }
     {
     }
 };
@@ -184,12 +170,12 @@ private:
     void resync_interrupted_enemy(const CombatEvent& event);
     // Reschedules one ability at cast_time + cooldown and queues the call.
     void reschedule_ability(
-        Enemy& enemy, EnemyAbility& ability, ch::time_point<ch::system_clock> cast_time);
+        Enemy& enemy, EnemyAbilityRuntime& ability, ch::time_point<ch::system_clock> cast_time);
     // Queues the ability's next occurrence and wakes the scheduler thread.
     void enqueue_shotcall_locked(
-        const std::string& enemy_guid, const EnemyAbility& ability, CallOrigin origin);
+        const std::string& enemy_guid, const EnemyAbilityRuntime& ability, CallOrigin origin);
     // Moves an ability one cooldown forward and queues the next occurrence.
-    void advance_recurrence(Enemy& enemy, EnemyAbility& ability);
+    void advance_recurrence(Enemy& enemy, EnemyAbilityRuntime& ability);
     // Wakes the scheduler after a schedule or enemy change.
     void wake_scheduler_locked();
     // Earliest time the scheduler should wake, if any call can fire.

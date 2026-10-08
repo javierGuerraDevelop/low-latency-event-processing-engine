@@ -1,5 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <map>
+#include <optional>
+#include <set>
+#include <string_view>
+#include <utility>
+
 #include "constants.h"
 
 // --- get_class_from_identifying_spells ---
@@ -144,7 +150,7 @@ TEST(Constants, BattleRez_UnknownReturnsFalse)
     EXPECT_FALSE(Constants::is_battle_rez(999999));
 }
 
-// --- is_tracked_enemy / is_enemy_ccable ---
+// --- is_tracked_enemy / enemy_data ---
 
 TEST(Constants, TrackedEnemy_KnownNPC)
 {
@@ -161,14 +167,59 @@ TEST(Constants, TrackedEnemy_EmptyReturnsFalse)
     EXPECT_FALSE(Constants::is_tracked_enemy(""));
 }
 
-TEST(Constants, EnemyCcable_KnownNPC)
+TEST(Constants, EnemyData_TableIsValid)
 {
-    EXPECT_TRUE(Constants::is_enemy_ccable("216293"));
+    static_assert(Constants::enemy_data.size() == 54, "enemy_data row count");
+
+    std::set<std::pair<std::string_view, int>> seen_pairs;
+    std::map<Constants::Mechanic, int> mechanic_counts;
+    for (const auto& row : Constants::enemy_data) {
+        EXPECT_GT(row.cooldown.count(), 0);
+        EXPECT_GE(row.first_cast.count(), 0);
+        EXPECT_FALSE(row.callout.empty());
+        EXPECT_TRUE(seen_pairs.emplace(row.enemy_id, row.spell_id).second)
+            << row.enemy_id << "/" << row.spell_id;
+        ++mechanic_counts[row.mechanic];
+    }
+
+    EXPECT_EQ(mechanic_counts.size(), 6u);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::Kick], 0);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::Stun], 0);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::Dispel], 0);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::TankHit], 0);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::Movement], 0);
+    EXPECT_GT(mechanic_counts[Constants::Mechanic::Awareness], 0);
 }
 
-TEST(Constants, EnemyCcable_UnknownReturnsFalse)
+TEST(Constants, EnemyData_KickRowsMatchPreviousInterruptableRows)
 {
-    EXPECT_FALSE(Constants::is_enemy_ccable("000000"));
+    int kick_rows = 0;
+    for (const auto& row : Constants::enemy_data) {
+        if (row.mechanic == Constants::Mechanic::Kick) {
+            ++kick_rows;
+        }
+    }
+    EXPECT_EQ(kick_rows, 14);
+}
+
+TEST(Constants, EnemyData_MechanicMapping)
+{
+    const auto mechanic_for = [](std::string_view enemy_id, int spell_id) {
+        for (const auto& row : Constants::enemy_data) {
+            if (row.enemy_id == enemy_id && row.spell_id == spell_id) {
+                return std::optional<Constants::Mechanic> { row.mechanic };
+            }
+        }
+        return std::optional<Constants::Mechanic> { };
+    };
+
+    EXPECT_EQ(mechanic_for("210269", 463218), Constants::Mechanic::Kick);
+    EXPECT_EQ(mechanic_for("164557", 326409), Constants::Mechanic::Stun);
+    EXPECT_EQ(mechanic_for("234957", 1221483), Constants::Mechanic::Dispel);
+    EXPECT_EQ(mechanic_for("242631", 1235368), Constants::Mechanic::TankHit);
+    EXPECT_EQ(mechanic_for("236995", 1226111), Constants::Mechanic::Movement);
+    EXPECT_EQ(mechanic_for("214761", 431364), Constants::Mechanic::Awareness);
+    EXPECT_FALSE(mechanic_for("000000", 1).has_value());
 }
 
 // --- is_interrupt / is_crowd_control ---

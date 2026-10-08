@@ -7,6 +7,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <string_view>
 
 namespace Constants {
@@ -295,79 +296,87 @@ constexpr bool is_battle_rez(int spell_id)
     return false;
 }
 
-struct EnemySpellEntry {
+// How a callout is delivered; only Kick and Stun assign a party member.
+enum class Mechanic : std::uint8_t { Kick,
+    Stun,
+    Dispel,
+    TankHit,
+    Movement,
+    Awareness };
+
+// Immutable static data for one tracked enemy ability.
+struct EnemySpellProfile {
     std::string_view enemy_id;
     int spell_id;
-    long long first_cast_ms;
-    long long cooldown_ms;
+    std::chrono::milliseconds first_cast;
+    std::chrono::milliseconds cooldown;
     std::string_view callout;
-    bool is_interruptable;
-    bool is_ccable;
+    Mechanic mechanic;
 };
 
-inline constexpr std::array<EnemySpellEntry, 54> enemy_data = { {
+inline constexpr std::array<EnemySpellProfile, 54> enemy_data = { {
     // Eco-dome
-    { "245092", 1215850, 20000, 37000, "AoE", false, true },
-    { "234883", 1221152, 6500, 18200, "AoE", false, true },
-    { "242631", 1235368, 6900, 15800, "Tank Frontal", false, true },
-    { "236995", 1226111, 15000, 20600, "Ejection", false, true },
-    { "234957", 1221483, 15000, 20600, "Dispel", false, true },
-    { "234962", 1221679, 6000, 13300, "Leap", false, true },
+    { "245092", 1215850, std::chrono::milliseconds { 20000 }, std::chrono::milliseconds { 37000 }, "AoE", Mechanic::Stun },
+    { "234883", 1221152, std::chrono::milliseconds { 6500 }, std::chrono::milliseconds { 18200 }, "AoE", Mechanic::Stun },
+    { "242631", 1235368, std::chrono::milliseconds { 6900 }, std::chrono::milliseconds { 15800 }, "Tank Frontal", Mechanic::TankHit },
+    { "236995", 1226111, std::chrono::milliseconds { 15000 }, std::chrono::milliseconds { 20600 }, "Ejection", Mechanic::Movement },
+    { "234957", 1221483, std::chrono::milliseconds { 15000 }, std::chrono::milliseconds { 20600 }, "Dispel", Mechanic::Dispel },
+    { "234962", 1221679, std::chrono::milliseconds { 6000 }, std::chrono::milliseconds { 13300 }, "Leap", Mechanic::Movement },
     // Tazavesh
-    { "180567", 357827, 5000, 17000, "Leap", false, true },
-    { "246285", 1240912, 14300, 23000, "Buster", false, true },
-    { "246285", 1240821, 8000, 23000, "Spread", false, true },
-    { "178165", 355429, 11300, 23000, "AOE", false, true },
-    { "178141", 355132, 9700, 27900, "Fish sticks", false, true },
-    { "180429", 357238, 13600, 26700, "Pulsar", false, true },
-    { "179386", 368661, 8300, 14500, "Toss", false, true },
-    { "177716", 351119, 8000, 18200, "Tee Pee", true, true },
-    { "177816", 355915, 7300, 17000, "Dispel", false, true },
-    { "180431", 357260, 13300, 21800, "Unstable Rift", true, true },
+    { "180567", 357827, std::chrono::milliseconds { 5000 }, std::chrono::milliseconds { 17000 }, "Leap", Mechanic::Movement },
+    { "246285", 1240912, std::chrono::milliseconds { 14300 }, std::chrono::milliseconds { 23000 }, "Buster", Mechanic::TankHit },
+    { "246285", 1240821, std::chrono::milliseconds { 8000 }, std::chrono::milliseconds { 23000 }, "Spread", Mechanic::Awareness },
+    { "178165", 355429, std::chrono::milliseconds { 11300 }, std::chrono::milliseconds { 23000 }, "AOE", Mechanic::Stun },
+    { "178141", 355132, std::chrono::milliseconds { 9700 }, std::chrono::milliseconds { 27900 }, "Fish sticks", Mechanic::Awareness },
+    { "180429", 357238, std::chrono::milliseconds { 13600 }, std::chrono::milliseconds { 26700 }, "Pulsar", Mechanic::Awareness },
+    { "179386", 368661, std::chrono::milliseconds { 8300 }, std::chrono::milliseconds { 14500 }, "Toss", Mechanic::Movement },
+    { "177716", 351119, std::chrono::milliseconds { 8000 }, std::chrono::milliseconds { 18200 }, "Tee Pee", Mechanic::Kick },
+    { "177816", 355915, std::chrono::milliseconds { 7300 }, std::chrono::milliseconds { 17000 }, "Dispel", Mechanic::Dispel },
+    { "180431", 357260, std::chrono::milliseconds { 13300 }, std::chrono::milliseconds { 21800 }, "Unstable Rift", Mechanic::Kick },
     // Halls of Atonement
-    { "164557", 326409, 8900, 23000, "AOE", false, true },
-    { "167607", 1235326, 15900, 32800, "Stop casting", false, true },
-    { "164562", 326450, 15300, 24200, "Loyal Beast", true, true },
-    { "165414", 325876, 9700, 24200, "Dispel", false, true },
+    { "164557", 326409, std::chrono::milliseconds { 8900 }, std::chrono::milliseconds { 23000 }, "AOE", Mechanic::Stun },
+    { "167607", 1235326, std::chrono::milliseconds { 15900 }, std::chrono::milliseconds { 32800 }, "Stop casting", Mechanic::Stun },
+    { "164562", 326450, std::chrono::milliseconds { 15300 }, std::chrono::milliseconds { 24200 }, "Loyal Beast", Mechanic::Kick },
+    { "165414", 325876, std::chrono::milliseconds { 9700 }, std::chrono::milliseconds { 24200 }, "Dispel", Mechanic::Dispel },
     // Floodgate
-    { "230748", 465827, 6800, 19400, "Warp blood", false, true },
-    { "231014", 465120, 8300, 17000, "Loaderbots spinning", false, true },
+    { "230748", 465827, std::chrono::milliseconds { 6800 }, std::chrono::milliseconds { 19400 }, "Warp blood", Mechanic::Awareness },
+    { "231014", 465120, std::chrono::milliseconds { 8300 }, std::chrono::milliseconds { 17000 }, "Loaderbots spinning", Mechanic::Awareness },
     // Dawnbreaker
-    { "214761", 432448, 8300, 23000, "Seed", false, true },
-    { "214761", 431364, 3300, 10900, "Ray", false, true },
-    { "210966", 451107, 4900, 20600, "Cocoon", false, true },
-    { "228540", 431309, 12400, 23000, "Curse", false, true },
-    { "213892", 431309, 12400, 23000, "Curse", false, true },
-    { "211261", 451102, 14300, 27800, "Aoe", false, true },
-    { "211261", 451119, 8300, 12100, "Dot", false, true },
-    { "211262", 451119, 3900, 12100, "Dot", false, true },
-    { "211263", 451119, 4900, 12100, "Dot", false, true },
-    { "211263", 450854, 12100, 24300, "Orb", false, true },
+    { "214761", 432448, std::chrono::milliseconds { 8300 }, std::chrono::milliseconds { 23000 }, "Seed", Mechanic::Awareness },
+    { "214761", 431364, std::chrono::milliseconds { 3300 }, std::chrono::milliseconds { 10900 }, "Ray", Mechanic::Awareness },
+    { "210966", 451107, std::chrono::milliseconds { 4900 }, std::chrono::milliseconds { 20600 }, "Cocoon", Mechanic::Awareness },
+    { "228540", 431309, std::chrono::milliseconds { 12400 }, std::chrono::milliseconds { 23000 }, "Curse", Mechanic::Dispel },
+    { "213892", 431309, std::chrono::milliseconds { 12400 }, std::chrono::milliseconds { 23000 }, "Curse", Mechanic::Dispel },
+    { "211261", 451102, std::chrono::milliseconds { 14300 }, std::chrono::milliseconds { 27800 }, "Aoe", Mechanic::Stun },
+    { "211261", 451119, std::chrono::milliseconds { 8300 }, std::chrono::milliseconds { 12100 }, "Dot", Mechanic::Dispel },
+    { "211262", 451119, std::chrono::milliseconds { 3900 }, std::chrono::milliseconds { 12100 }, "Dot", Mechanic::Dispel },
+    { "211263", 451119, std::chrono::milliseconds { 4900 }, std::chrono::milliseconds { 12100 }, "Dot", Mechanic::Dispel },
+    { "211263", 450854, std::chrono::milliseconds { 12100 }, std::chrono::milliseconds { 24300 }, "Orb", Mechanic::Awareness },
     // Ara-kara
-    { "216293", 434793, 4000, 16900, "AoE Barrage", true, true },
-    { "217531", 434802, 9600, 20800, "Fear", true, true },
-    { "218324", 438877, 12100, 21900, "AoE", false, true },
-    { "216338", 1241693, 6000, 30300, "AoE", false, true },
-    { "223253", 448248, 4800, 20600, "Volley", true, true },
-    { "216364", 433841, 5800, 19000, "Volley", true, true },
+    { "216293", 434793, std::chrono::milliseconds { 4000 }, std::chrono::milliseconds { 16900 }, "AoE Barrage", Mechanic::Kick },
+    { "217531", 434802, std::chrono::milliseconds { 9600 }, std::chrono::milliseconds { 20800 }, "Fear", Mechanic::Kick },
+    { "218324", 438877, std::chrono::milliseconds { 12100 }, std::chrono::milliseconds { 21900 }, "AoE", Mechanic::Stun },
+    { "216338", 1241693, std::chrono::milliseconds { 6000 }, std::chrono::milliseconds { 30300 }, "AoE", Mechanic::Stun },
+    { "223253", 448248, std::chrono::milliseconds { 4800 }, std::chrono::milliseconds { 20600 }, "Volley", Mechanic::Kick },
+    { "216364", 433841, std::chrono::milliseconds { 5800 }, std::chrono::milliseconds { 19000 }, "Volley", Mechanic::Kick },
     // Priory of the Sacred Flame
-    { "206696", 427609, 20400, 23000, "Stop casting", false, true },
-    { "206696", 427621, 3800, 15700, "Impale bleed", false, true },
-    { "221760", 444743, 9500, 24300, "Volley", true, true },
-    { "212826", 448485, 5900, 12100, "Tank Buster", false, true },
-    { "212826", 448492, 14700, 15700, "AoE", false, true },
-    { "212831", 427897, 10800, 18200, "AoE", false, true },
-    { "239833", 424431, 26100, 37600, "AoE", false, true },
-    { "206704", 448791, 15500, 21700, "AoE", false, true },
-    { "206699", 446776, 7000, 15800, "Leap bleed", false, true },
+    { "206696", 427609, std::chrono::milliseconds { 20400 }, std::chrono::milliseconds { 23000 }, "Stop casting", Mechanic::Stun },
+    { "206696", 427621, std::chrono::milliseconds { 3800 }, std::chrono::milliseconds { 15700 }, "Impale bleed", Mechanic::TankHit },
+    { "221760", 444743, std::chrono::milliseconds { 9500 }, std::chrono::milliseconds { 24300 }, "Volley", Mechanic::Kick },
+    { "212826", 448485, std::chrono::milliseconds { 5900 }, std::chrono::milliseconds { 12100 }, "Tank Buster", Mechanic::TankHit },
+    { "212826", 448492, std::chrono::milliseconds { 14700 }, std::chrono::milliseconds { 15700 }, "AoE", Mechanic::Stun },
+    { "212831", 427897, std::chrono::milliseconds { 10800 }, std::chrono::milliseconds { 18200 }, "AoE", Mechanic::Stun },
+    { "239833", 424431, std::chrono::milliseconds { 26100 }, std::chrono::milliseconds { 37600 }, "AoE", Mechanic::Stun },
+    { "206704", 448791, std::chrono::milliseconds { 15500 }, std::chrono::milliseconds { 21700 }, "AoE", Mechanic::Stun },
+    { "206699", 446776, std::chrono::milliseconds { 7000 }, std::chrono::milliseconds { 15800 }, "Leap bleed", Mechanic::Movement },
     // Cinderbrew Meadery
-    { "214697", 463206, 8100, 18100, "Knock", true, true }, // Tenderize
-    { "210269", 463218, 8500, 24200, "DoT", true, true }, // Volatile Keg
-    { "223423", 448619, 9100, 30300, "Charge", true, true }, // Reckless Delivery
-    { "220946", 442995, 10300, 23000, "AoE", true, true }, // Swarming Surprise
-    { "222964", 441434, 8700, 23000, "Batch", false, true }, // Failed Batch
-    { "220141", 440687, 5900, 25400, "Volley", true, true }, // Honey Volley
-    { "218671", 437956, 10500, 18200, "Dispel", true, true }, // Erupting Inferno
+    { "214697", 463206, std::chrono::milliseconds { 8100 }, std::chrono::milliseconds { 18100 }, "Knock", Mechanic::Kick }, // Tenderize
+    { "210269", 463218, std::chrono::milliseconds { 8500 }, std::chrono::milliseconds { 24200 }, "DoT", Mechanic::Kick }, // Volatile Keg
+    { "223423", 448619, std::chrono::milliseconds { 9100 }, std::chrono::milliseconds { 30300 }, "Charge", Mechanic::Kick }, // Reckless Delivery
+    { "220946", 442995, std::chrono::milliseconds { 10300 }, std::chrono::milliseconds { 23000 }, "AoE", Mechanic::Kick }, // Swarming Surprise
+    { "222964", 441434, std::chrono::milliseconds { 8700 }, std::chrono::milliseconds { 23000 }, "Batch", Mechanic::Stun }, // Failed Batch
+    { "220141", 440687, std::chrono::milliseconds { 5900 }, std::chrono::milliseconds { 25400 }, "Volley", Mechanic::Kick }, // Honey Volley
+    { "218671", 437956, std::chrono::milliseconds { 10500 }, std::chrono::milliseconds { 18200 }, "Dispel", Mechanic::Kick }, // Erupting Inferno
 } };
 
 constexpr bool is_tracked_enemy(std::string_view enemy_id)
@@ -375,16 +384,6 @@ constexpr bool is_tracked_enemy(std::string_view enemy_id)
     for (const auto& entry : enemy_data) {
         if (entry.enemy_id == enemy_id) {
             return true;
-        }
-    }
-    return false;
-}
-
-constexpr bool is_enemy_ccable(std::string_view enemy_id)
-{
-    for (const auto& entry : enemy_data) {
-        if (entry.enemy_id == enemy_id) {
-            return entry.is_ccable;
         }
     }
     return false;

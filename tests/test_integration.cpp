@@ -44,7 +44,7 @@ std::optional<ch::milliseconds> first_cast_for(std::string_view enemy_id, int sp
 {
     for (const auto& entry : Constants::enemy_data) {
         if (entry.enemy_id == enemy_id && entry.spell_id == spell_id) {
-            return ch::milliseconds { entry.first_cast_ms };
+            return entry.first_cast;
         }
     }
     return std::nullopt;
