@@ -62,6 +62,9 @@ add_executable(ShotCallerTests
     tests/test_engine.cpp
     tests/test_integration.cpp
     tests/test_protocol.cpp
+    tests/test_lifecycle.cpp
+    # App-side file I/O compiled into the tests so log helpers stay testable.
+    src/line_reader.cpp
 )
 target_link_libraries(ShotCallerTests PRIVATE ShotCallerLib GTest::gtest_main
                                              shotcaller_warnings)
