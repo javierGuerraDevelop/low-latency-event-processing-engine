@@ -12,7 +12,7 @@ namespace ch = std::chrono;
 
 namespace {
 
-// Literal records from text_files/combat_log_large.txt (Cinderbrew Meadery).
+// Literal records from sample_logs/combat_log_large.txt (Cinderbrew Meadery).
 constexpr const char* CHALLENGE_MODE_START_LINE
     = R"(6/14/2025 18:03:13.665-4  CHALLENGE_MODE_START,"Cinderbrew Meadery",2661,506,13,[9,10,147])";
 constexpr const char* SKYFURY_LINE

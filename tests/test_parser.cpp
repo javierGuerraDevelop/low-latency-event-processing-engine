@@ -8,7 +8,7 @@ namespace ch = std::chrono;
 
 namespace {
 
-// Literal records from text_files/combat_log_large.txt (Cinderbrew Meadery).
+// Literal records from sample_logs/combat_log_large.txt (Cinderbrew Meadery).
 constexpr const char* COMBAT_LOG_VERSION_LINE
     = R"(6/14/2025 18:01:13.780-4  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,11.1.5,PROJECT_ID,1)";
 constexpr const char* ZONE_CHANGE_LINE
