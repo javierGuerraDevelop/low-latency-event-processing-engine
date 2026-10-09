@@ -47,13 +47,20 @@ cmake -B build && cmake --build build
 
 ```bash
 # C++ engine (pass your WoW logs directory)
-./build/ShotCallerWow /path/to/WoW/Logs
+./build/ShotCallerWow [--replay] [--strict-party-size] /path/to/WoW/Logs
 
 # Discord bot (requires ELEVENLABS_API_KEY and DISCORD_BOT_TOKEN)
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r discord_bot/requirements.txt
 python discord_bot/main.py
 ```
+
+The engine exits cleanly on `SIGINT`/`SIGTERM`, follows log rotation to the newest `WoWCombatLog*` file within about two seconds, and reports the process exit code.
+
+| Option                | Purpose                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `--replay`            | Read the initial log from the beginning before tailing, warming the roster immediately   |
+| `--strict-party-size` | Exit with code `2` when an encounter or `COMBATANT_INFO` snapshot reports fewer than 5   |
 
 FFmpeg must be installed and on `PATH` for voice playback.
 
