@@ -63,7 +63,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Open timestamped output file
     std::ofstream output_file;
     std::string output_path = open_output_file(output_file);
     if (!output_file.is_open()) {
@@ -71,7 +70,6 @@ int main(int argc, char* argv[])
     }
     std::cout << "Writing shotcalls to: " << output_path << std::endl;
 
-    // Wire engine callback to write messages to file and send over socket
     auto file_writer   = make_shotcall_writer(output_file);
     auto socket_sender = make_socket_sender();
 
@@ -82,7 +80,6 @@ int main(int argc, char* argv[])
         socket_sender(message);
     });
 
-    // Run process_shotcalls on a background thread
     std::jthread shotcall_thread { [&engine](std::stop_token stop_token) {
         engine.process_shotcalls(stop_token);
     } };

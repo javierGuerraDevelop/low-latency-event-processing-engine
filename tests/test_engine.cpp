@@ -72,7 +72,7 @@ TEST(Engine, IdentifyPlayer_BattleShout_Warrior)
         "Creature-0-0-0-0-999-0", 6673); // Battle Shout
     engine.handle_event(ev);
 
-    // Second event with same source should not re-identify (verify no crash)
+    // A second event from the same source must not re-identify or crash.
     auto ev2 = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 6673);
     engine.handle_event(ev2);
@@ -84,7 +84,6 @@ TEST(Engine, IdentifyPlayer_UnknownSpell_NotAdded)
     auto ev = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Nobody", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 999999);
     engine.handle_event(ev);
-    // No crash, player not in roster (tested indirectly via dispatch)
 }
 
 TEST(Engine, IdentifyPlayer_MultipleDifferentClasses)
@@ -99,7 +98,6 @@ TEST(Engine, IdentifyPlayer_MultipleDifferentClasses)
     engine.handle_event(ev1);
     engine.handle_event(ev2);
     engine.handle_event(ev3);
-    // All three identified without error
 }
 
 TEST(Engine, FirstEventInterrupt_IdentifiesWarriorAndAppliesCooldown)
@@ -227,12 +225,10 @@ TEST(Engine, InterruptCast_PutsOnCooldown)
     auto now = ch::system_clock::now();
     engine.handle_event(make_challenge_start(now));
 
-    // Identify as Warrior
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now);
     engine.handle_event(id_ev);
 
-    // Cast interrupt (Pummel)
     auto int_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 6552, "", now);
     engine.handle_event(int_ev);
@@ -247,7 +243,7 @@ TEST(Engine, InterruptCast_PutsOnCooldown)
         last_callout = message.text;
     });
 
-    // Dispatch within 1s window before first shotcall (first_cast=4000ms)
+    // Dispatch inside the lead window for the first shotcall (first_cast=4000ms).
     auto dispatch_time = now + ch::milliseconds { 3500 };
     engine.dispatch_due(dispatch_time);
 
@@ -260,16 +256,13 @@ TEST(Engine, CCCast_PutsOnCooldown)
     ShotCallEngine engine;
     auto now = ch::system_clock::now();
 
-    // Identify as Warrior
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now);
     engine.handle_event(id_ev);
 
-    // Cast CC (Shockwave 46968, 40s cd)
     auto cc_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 46968, "", now);
     engine.handle_event(cc_ev);
-    // No crash; CD is tracked internally
 }
 
 TEST(Engine, IgnorableEvent_DoesNotAffectCooldowns)
@@ -285,7 +278,6 @@ TEST(Engine, IgnorableEvent_DoesNotAffectCooldowns)
     auto dmg_ev = make_event("SPELL_DAMAGE", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 6552, "", now);
     engine.handle_event(dmg_ev);
-    // No cooldown should be set (tested indirectly -- interrupt should still be available)
 }
 
 // ==================== Death / Rez ====================
@@ -313,7 +305,7 @@ TEST(Engine, PlayerDeath_MarkedDead)
         last_callout = message.text;
     });
 
-    // Dispatch within 1s window before first shotcall (first_cast=4000ms)
+    // Dispatch inside the lead window for the first shotcall (first_cast=4000ms).
     engine.dispatch_due(now + ch::milliseconds { 3500 });
     EXPECT_NE(last_callout.find("this one is going off"), std::string::npos);
 }
@@ -334,16 +326,13 @@ TEST(Engine, BattleRez_RevivesPlayer)
         "Player-1-AAA", 1126, "", now);
     engine.handle_event(id_ev2);
 
-    // Kill Warrior
     auto death_ev = make_event("UNIT_DIED", "", "", "", "Player-1-AAA", 0, "", now);
     engine.handle_event(death_ev);
 
-    // Rez Warrior (battle rez id 61999)
     auto rez_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Healer", PLAYER_FLAG,
         "Player-1-AAA", 61999, "", now);
     engine.handle_event(rez_ev);
 
-    // Set up enemy
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-DEF", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now);
     engine.handle_event(enemy_ev);
@@ -353,10 +342,9 @@ TEST(Engine, BattleRez_RevivesPlayer)
         last_callout = message.text;
     });
 
-    // Dispatch within 1s window before first shotcall (first_cast=4000ms)
+    // Dispatch inside the lead window for the first shotcall (first_cast=4000ms).
     engine.dispatch_due(now + ch::milliseconds { 3500 });
-    // Warrior is alive again and should be assigned (Tank or this one is going off depending on
-    // other state) Since Warrior's interrupt is off cooldown, should see "Tank" in the callout
+    // The revived Warrior's interrupt is off cooldown, so the callout names it.
     EXPECT_NE(last_callout.find("Tank"), std::string::npos);
 }
 
@@ -373,7 +361,6 @@ TEST(Engine, EnemyDeath_RemovesAndPurgesQueue)
     auto death_ev = make_event("UNIT_DIED", "", "", "", "Creature-0-0-0-0-216293-ABC", 0, "", now);
     engine.handle_event(death_ev);
 
-    // Nothing to dispatch
     EXPECT_EQ(engine.dispatch_due(now + ch::seconds { 5 }), 0u);
 }
 
@@ -382,7 +369,6 @@ TEST(Engine, DeathOfUnknownEntity_NoOp)
     ShotCallEngine engine;
     auto death_ev = make_event("UNIT_DIED", "", "", "", "Player-1-UNKNOWN", 0);
     engine.handle_event(death_ev);
-    // No crash
 }
 
 // ==================== Enemy Identification ====================
@@ -398,7 +384,6 @@ TEST(Engine, IdentifyEnemy_TrackedNPC)
         "Player-1-AAA", 434793, "216293", now);
     engine.handle_event(ev);
 
-    // Should have generated shotcalls -- dispatch should work
     std::string last_callout;
     engine.set_shotcall_callback([&](const EngineMessage& message) {
         last_callout = message.text;
@@ -441,7 +426,6 @@ TEST(Engine, IdentifyEnemy_DuplicateGUID_NotReidentified)
         "Player-1-AAA", 434793, "216293", now);
     engine.handle_event(ev1);
     engine.handle_event(ev2);
-    // Should only have one set of shotcalls, not duplicated
 }
 
 TEST(Engine, IdentifyEnemy_MultipleSpells)
@@ -455,7 +439,6 @@ TEST(Engine, IdentifyEnemy_MultipleSpells)
         "Player-1-AAA", 432448, "214761", now);
     engine.handle_event(ev);
 
-    // Should have shotcalls from both spells
     std::vector<std::string> callouts;
     engine.set_shotcall_callback([&](const EngineMessage& message) {
         callouts.push_back(message.text);
@@ -488,7 +471,7 @@ TEST(Engine, GenerateShotcalls_CorrectCount)
         }
     });
 
-    // Dispatch at each exact call_time (must be within 1s window)
+    // Dispatch at each exact call_time.
     long long first_cast_ms = 4000;
     long long cd_ms         = 16900;
     for (int i = 0; i < 18; i++) {
@@ -535,7 +518,7 @@ TEST(Engine, Dispatch_AvailableInterrupter)
         "Player-1-BBB", 6673, "", now); // Warrior
     engine.handle_event(id_ev);
 
-    // NPC 216293 has interruptable AoE Barrage
+    // NPC 216293 tracks AoE Barrage with the Kick mechanic.
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now);
     engine.handle_event(enemy_ev);
@@ -555,21 +538,17 @@ TEST(Engine, Dispatch_InterrupterOnCooldown_AssignsNext)
     auto now = ch::system_clock::now();
     engine.handle_event(make_challenge_start(now));
 
-    // Warrior (Tank)
     auto id1 = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG, "Player-1-BBB",
         6673, "", now);
     engine.handle_event(id1);
-    // Shaman (Healer)
     auto id2 = make_event("SPELL_CAST_SUCCESS", "Player-1-BBB", "Healer", PLAYER_FLAG,
         "Player-1-AAA", 8004, "", now);
     engine.handle_event(id2);
 
-    // Warrior uses interrupt
     auto int_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 6552, "", now);
     engine.handle_event(int_ev);
 
-    // Set up enemy
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-216293-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 434793, "216293", now);
     engine.handle_event(enemy_ev);
@@ -580,7 +559,6 @@ TEST(Engine, Dispatch_InterrupterOnCooldown_AssignsNext)
     });
 
     engine.dispatch_due(now + ch::seconds { 4 });
-    // Warrior on cooldown, Shaman should be assigned
     EXPECT_NE(last_callout.find("Healer"), std::string::npos);
 }
 
@@ -594,7 +572,6 @@ TEST(Engine, Dispatch_AllOnCooldown_GoingOff)
         6673, "", now);
     engine.handle_event(id1);
 
-    // Use interrupt
     auto int_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Creature-0-0-0-0-999-0", 6552, "", now);
     engine.handle_event(int_ev);
@@ -644,12 +621,11 @@ TEST(Engine, Dispatch_StunRow_AssignsCcer)
     auto now = ch::system_clock::now();
     engine.handle_event(make_challenge_start(now));
 
-    // Warrior with CC (Shockwave/Intimidating Shout)
     auto id_ev = make_event("SPELL_CAST_SUCCESS", "Player-1-AAA", "Tank", PLAYER_FLAG,
         "Player-1-BBB", 6673, "", now);
     engine.handle_event(id_ev);
 
-    // NPC 164557's AoE is a Stun mechanic (is_ccable=true previously).
+    // NPC 164557's AoE uses the Stun mechanic, so it needs a CCer.
     auto enemy_ev = make_event("SPELL_CAST_SUCCESS", "Creature-0-0-0-0-164557-ABC", "Mob",
         ENEMY_FLAG, "Player-1-AAA", 326409, "164557", now);
     engine.handle_event(enemy_ev);
@@ -661,7 +637,6 @@ TEST(Engine, Dispatch_StunRow_AssignsCcer)
 
     // First cast at 8900ms
     engine.dispatch_due(now + ch::milliseconds { 8900 });
-    // Warrior has CC available, should be assigned
     EXPECT_NE(last_callout.find("Tank"), std::string::npos);
 }
 
