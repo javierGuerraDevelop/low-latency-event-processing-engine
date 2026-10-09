@@ -1,6 +1,7 @@
 build/
 Build/
 cmake-build-*/
+build-*/
 out/
 .cache/
 
@@ -70,3 +71,4 @@ bin/
 lib/
 dist/
 install/
+
