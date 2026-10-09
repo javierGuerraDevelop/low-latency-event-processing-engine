@@ -100,3 +100,27 @@ TEST(Lifecycle, ReplayFile_ParsesEveryLine)
     EXPECT_EQ(replay_file(log.string(), engine), 2u);
     EXPECT_EQ(replay_file((directory.path() / "missing.txt").string(), engine), 0u);
 }
+
+TEST(Lifecycle, MonitorFile_ReturnsWhenStopFlagSet)
+{
+    const TempDirectory directory;
+    const fs::path log = directory.path() / "WoWCombatLog.txt";
+    write_file(log, "");
+
+    ShotCallEngine engine;
+    stop_requested = 1;
+    monitor_file(directory.path().string(), log.string(), engine, std::stop_token { }, false);
+    stop_requested = 0;
+}
+
+TEST(Lifecycle, MonitorFile_ReturnsWhenStopTokenRequested)
+{
+    const TempDirectory directory;
+    const fs::path log = directory.path() / "WoWCombatLog.txt";
+    write_file(log, "");
+
+    ShotCallEngine engine;
+    std::stop_source source;
+    source.request_stop();
+    monitor_file(directory.path().string(), log.string(), engine, source.get_token(), false);
+}

@@ -1,5 +1,7 @@
 #include "line_reader.h"
 
+volatile std::sig_atomic_t stop_requested = 0;
+
 namespace ch = std::chrono;
 
 namespace {
@@ -99,24 +101,48 @@ std::size_t replay_file(const std::string& filename, ShotCallEngine& engine)
     return events;
 }
 
-void monitor_file(const std::string& filename, ShotCallEngine& engine)
+void monitor_file(const std::string& directory, const std::string& initial_file,
+    ShotCallEngine& engine, std::stop_token stop_token, bool replay)
 {
-    std::ifstream log_file { filename };
+    std::ifstream log_file { initial_file };
     if (!log_file.is_open()) {
-        std::cerr << "Failed to open combat log: " << filename << std::endl;
+        std::cerr << "Failed to open combat log: " << initial_file << std::endl;
         return;
     }
+
+    std::string current_file = initial_file;
+    if (replay) {
+        replay_file(current_file, engine);
+    }
+    log_file.clear();
     log_file.seekg(0, std::ios::end);
-    std::cout << "Monitoring: " << filename << std::endl;
+    std::cout << "Monitoring: " << current_file << std::endl;
 
     std::string line;
-    while (true) {
+    auto last_rotation_check = ch::steady_clock::now();
+    while (stop_requested == 0 && !stop_token.stop_requested()
+        && !engine.strict_party_violation()) {
         if (std::getline(log_file, line)) {
             handle_log_line(line, engine);
-        } else {
-            log_file.clear();
-            log_file.seekg(0, std::ios::cur);
-            std::this_thread::sleep_for(ch::milliseconds { 250 });
+            continue;
         }
+        log_file.clear();
+
+        const auto now = ch::steady_clock::now();
+        if (now - last_rotation_check >= ch::seconds { 2 }) {
+            last_rotation_check      = now;
+            const std::string latest = select_latest_log(directory, current_file);
+            if (!latest.empty() && latest != current_file) {
+                std::ifstream rotated { latest };
+                if (rotated.is_open()) {
+                    log_file     = std::move(rotated);
+                    current_file = latest;
+                    std::cout << "Switched to new combat log: " << current_file << std::endl;
+                    continue;
+                }
+            }
+        }
+
+        std::this_thread::sleep_for(ch::milliseconds { 250 });
     }
 }
