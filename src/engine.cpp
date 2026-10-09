@@ -135,12 +135,14 @@ std::string format_spoken_call(
 } // namespace
 
 ShotCallEngine::ShotCallEngine(ch::milliseconds call_lead, ch::milliseconds late_grace,
-    ch::milliseconds reservation_window, ch::milliseconds party_status_interval)
+    ch::milliseconds reservation_window, ch::milliseconds party_status_interval,
+    bool strict_party_size)
     : call_lead_ { call_lead }
     , late_grace_ { late_grace }
     , reservation_window_ { reservation_window }
     , party_status_interval_ { std::clamp(
           party_status_interval, ch::milliseconds { 20000 }, ch::milliseconds { 30000 }) }
+    , strict_party_size_ { strict_party_size }
 {
 }
 
@@ -212,8 +214,12 @@ bool ShotCallEngine::handle_boundary_event(const CombatEvent& event)
         begin_roster_snapshot(event.time_stamp);
         party_size_ok_ = event.group_size == 5;
         if (!party_size_ok_) {
-            std::cerr << "Encounter started with group size " << event.group_size
-                      << " (expected 5); pausing shotcalls." << std::endl;
+            if (strict_party_size_ && event.group_size < 5) {
+                strict_party_violation_ = true;
+            } else {
+                std::cerr << "Encounter started with group size " << event.group_size
+                          << " (expected 5); pausing shotcalls." << std::endl;
+            }
         }
         return true;
     }
@@ -272,6 +278,9 @@ void ShotCallEngine::finalize_roster_snapshot_if_due(
 
     roster_snapshot_pending_ = false;
     roster_snapshot_known_   = !run_roster_.empty();
+    if (roster_snapshot_known_ && strict_party_size_ && run_roster_.size() < 5) {
+        strict_party_violation_ = true;
+    }
 }
 
 bool ShotCallEngine::in_active_run() const
@@ -548,6 +557,12 @@ PartyStatus ShotCallEngine::party_status() const
 {
     std::lock_guard<std::mutex> lock { mtx_ };
     return party_status_locked();
+}
+
+bool ShotCallEngine::strict_party_violation() const
+{
+    std::lock_guard<std::mutex> lock { mtx_ };
+    return strict_party_violation_;
 }
 
 PartyStatus ShotCallEngine::party_status_locked() const

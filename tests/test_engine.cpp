@@ -1707,3 +1707,57 @@ TEST(Engine, PartyStatus_OmitsAdvancedLoggingNoteWhenEnabled)
     EXPECT_EQ(statuses, 1);
     EXPECT_EQ(status.text, "1/5 players identified. Use your class ability to identify yourself.");
 }
+
+// ==================== Strict party size ====================
+
+TEST(Engine, StrictPartySize_EncounterWithFewerPlayersSetsViolation)
+{
+    ShotCallEngine engine { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+        ch::milliseconds { 3000 }, ch::milliseconds { 25000 }, true };
+    auto now = ch::system_clock::now();
+
+    engine.handle_event(make_encounter_start(3, now));
+    EXPECT_TRUE(engine.strict_party_violation());
+
+    ShotCallEngine valid { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+        ch::milliseconds { 3000 }, ch::milliseconds { 25000 }, true };
+    valid.handle_event(make_encounter_start(5, now));
+    EXPECT_FALSE(valid.strict_party_violation());
+}
+
+TEST(Engine, StrictPartySize_SnapshotWithFewerPlayersSetsViolation)
+{
+    auto now = ch::system_clock::now();
+
+    ShotCallEngine short_party { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+        ch::milliseconds { 3000 }, ch::milliseconds { 25000 }, true };
+    short_party.handle_event(make_challenge_start(now));
+    short_party.handle_event(make_combatant_info("Player-1-A", 65, now));
+    short_party.handle_event(make_combatant_info("Player-1-B", 252, now));
+    short_party.handle_event(make_combatant_info("Player-1-C", 73, now));
+    short_party.handle_event(make_combatant_info("Player-1-D", 262, now));
+    // A non-COMBATANT_INFO event finalizes the snapshot.
+    short_party.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-A", "A", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now + ch::milliseconds { 1 }));
+    EXPECT_TRUE(short_party.strict_party_violation());
+
+    ShotCallEngine full_party { ch::milliseconds { 2500 }, ch::milliseconds { 1000 },
+        ch::milliseconds { 3000 }, ch::milliseconds { 25000 }, true };
+    full_party.handle_event(make_challenge_start(now));
+    full_party.handle_event(make_combatant_info("Player-1-A", 65, now));
+    full_party.handle_event(make_combatant_info("Player-1-B", 252, now));
+    full_party.handle_event(make_combatant_info("Player-1-C", 73, now));
+    full_party.handle_event(make_combatant_info("Player-1-D", 262, now));
+    full_party.handle_event(make_combatant_info("Player-1-E", 267, now));
+    full_party.handle_event(make_event("SPELL_CAST_SUCCESS", "Player-1-A", "A", PLAYER_FLAG,
+        "Player-1-BBB", 6673, "", now + ch::milliseconds { 1 }));
+    EXPECT_FALSE(full_party.strict_party_violation());
+}
+
+TEST(Engine, StrictPartySize_DisabledByDefault)
+{
+    ShotCallEngine engine;
+    auto now = ch::system_clock::now();
+    engine.handle_event(make_encounter_start(3, now));
+    EXPECT_FALSE(engine.strict_party_violation());
+}

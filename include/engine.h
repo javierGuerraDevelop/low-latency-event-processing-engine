@@ -155,11 +155,13 @@ class ShotCallEngine {
 public:
     // call_lead is how early a call may fire; late_grace is how late it may
     // fire; reservation_window reserves an assigned ability after dispatch;
-    // party_status_interval is clamped to 20-30 seconds.
+    // party_status_interval is clamped to 20-30 seconds; strict_party_size
+    // reports boundaries with fewer than five players instead of pausing.
     explicit ShotCallEngine(ch::milliseconds call_lead = ch::milliseconds { 2500 },
         ch::milliseconds late_grace                    = ch::milliseconds { 1000 },
         ch::milliseconds reservation_window            = ch::milliseconds { 3000 },
-        ch::milliseconds party_status_interval         = ch::milliseconds { 25000 });
+        ch::milliseconds party_status_interval         = ch::milliseconds { 25000 },
+        bool strict_party_size                         = false);
     // Routes incoming combat events to the appropriate handler.
     void handle_event(const CombatEvent& event);
     void set_shotcall_callback(MessageCallback callback);
@@ -171,6 +173,9 @@ public:
     void process_shotcalls(std::stop_token stop_token);
     // Returns a snapshot of party identification state.
     PartyStatus party_status() const;
+    // True when strict_party_size is on and a boundary reported fewer than
+    // five players; the caller decides how to exit.
+    bool strict_party_violation() const;
 
 private:
     // Handlers and helpers below assume mtx_ is already held.
@@ -233,12 +238,14 @@ private:
     const ch::milliseconds late_grace_;
     const ch::milliseconds reservation_window_;
     const ch::milliseconds party_status_interval_;
+    const bool strict_party_size_;
     MessageCallback shotcall_callback_;
     mutable std::mutex mtx_; // Guards all mutable state below
     std::condition_variable_any wakeup_;
     std::uint64_t queue_revision_ = 0;
     std::uint64_t next_call_id_   = 1;
     std::optional<ch::time_point<ch::system_clock>> party_status_since_;
+    bool strict_party_violation_ = false;
     std::map<std::string, Player> roster_;
     std::map<std::string, Enemy> enemy_roster_;
     std::set<std::string> run_roster_;
